@@ -163,9 +163,25 @@ async function loadTournaments() {
     const response = await fetch(endpoint, {
       headers: {
         apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        "Accept-Profile": "public"
       }
     });
+
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+
+    tournaments = await response.json();
+    render();
+
+  } catch (error) {
+    $("status").textContent = "Kunne ikke hente turneringer";
+
+    $("list").innerHTML =
+      `<div class="empty">${esc(error.message)}</div>`;
+  }
+}
 
     if (!response.ok) {
       throw new Error(await response.text());
