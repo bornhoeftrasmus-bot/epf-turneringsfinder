@@ -152,17 +152,14 @@ function render() {
 
 async function loadTournaments() {
   try {
-    if (SUPABASE_URL.startsWith("__") || SUPABASE_ANON_KEY.startsWith("__")) {
-      throw new Error("Indsæt Supabase URL og anon/publishable key i app.js.");
-    }
+    const today = new Date().toISOString().slice(0, 10);
 
-    const today = new Date().toISOString().slice(0,10);
-    const endpoint = new URL(`${SUPABASE_URL}/rest/v1/tournaments`);
+    const endpoint =
+      `https://toeamjaomjgamdmavdck.supabase.co/rest/v1/tournaments` +
+      `?select=*` +
+      `&tournament_date=gte.${today}` +
+      `&order=tournament_date.asc`;
 
-endpoint.searchParams.set("select", "*");
-endpoint.searchParams.set("tournament_date", `gte.${today}`);
-endpoint.searchParams.set("order", "tournament_date.asc");
-    
     const response = await fetch(endpoint, {
       headers: {
         apikey: SUPABASE_ANON_KEY,
@@ -176,9 +173,11 @@ endpoint.searchParams.set("order", "tournament_date.asc");
 
     tournaments = await response.json();
     render();
+
   } catch (error) {
     $("status").textContent = "Kunne ikke hente turneringer";
-    $("list").innerHTML = `<div class="empty">${esc(error.message)}</div>`;
+    $("list").innerHTML =
+      `<div class="empty">${esc(error.message)}</div>`;
   }
 }
 
