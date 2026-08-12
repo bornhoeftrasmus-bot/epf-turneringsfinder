@@ -1,124 +1,117 @@
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_URL=process.env.SUPABASE_URL;
+const SERVICE_KEY=process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-export default async function handler(req, res) {
-  try {
-    if (!SUPABASE_URL || !SERVICE_KEY) {
-      return res.status(500).json({
-        success: false,
-        error: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY"
-      });
+export default async function handler(req,res){
+  try{
+    if(!SUPABASE_URL||!SERVICE_KEY){
+      return res.status(500).json({success:false,error:"Missing Supabase environment variables"});
     }
 
-    const events = await fetchCalendarPages(8);
-
-    const today = new Date();
+    const events=await fetchCalendarPages(8);
+    const today=new Date();
     today.setHours(0,0,0,0);
 
-    const dpfEvents = events
-      .filter((event) => event.OrganisationName === "Dansk Padel Forbunds rangliste")
-      .filter((event) => {
-        const date = new Date(event.StartDate);
-        date.setHours(0,0,0,0);
-        return date >= today;
+    const dpf=events
+      .filter(e=>e.OrganisationName==="Dansk Padel Forbunds rangliste")
+      .filter(e=>{
+        const d=new Date(e.StartDate);
+        d.setHours(0,0,0,0);
+        return d>=today;
       });
 
-    const tournaments = [];
+    const out=[];
 
-    for (const event of dpfEvents) {
-      try {
-        const [info, classesData] = await Promise.all([
-          getInfo(event.EventId),
-          getClasses(event.EventId)
+    for(const e of dpf){
+      try{
+        const [info,classesData]=await Promise.all([
+          getInfo(e.EventId),
+          getClasses(e.EventId)
         ]);
 
-        const classes = (classesData?.Classes || []).map((classItem) => ({
-          classId: classItem.ClassId,
-          className: classItem.ClassName,
-          level: findLevels(classItem.ClassName),
-          category: findCategories(classItem.ClassName)
+        const classes=(classesData?.Classes||[]).map(c=>({
+          classId:c.ClassId,
+          className:c.ClassName,
+          level:levels(c.ClassName),
+          category:categories(c.ClassName)
         }));
 
-        const classesText = classes.map((item) => item.className).join(" ");
-        const location = findLocation(info) || event.Address || "";
+        const classText=classes.map(c=>c.className).join(" ");
+        const rankedInLocation=findLocation(info)||e.Address||"";
+        const headerCity=findCityFromRankedin(info,rankedInLocation);
 
-        tournaments.push({
-          rankedin_id: String(event.EventId),
-          name: event.EventName || "",
-          levels: findLevels(classesText || event.EventName),
-          categories: findCategories(classesText || event.EventName),
+        out.push({
+          rankedin_id:String(e.EventId),
+          name:e.EventName||"",
+          levels:levels(classText||e.EventName),
+          categories:categories(classText||e.EventName),
           classes,
-          tournament_date: event.StartDate ? String(event.StartDate).slice(0,10) : null,
-          deadline: findClosingDate(info),
-          center: findCenter(location),
-          city: findCity(info, location),
-          rankedin_link: event.EventUrl
-            ? `https://www.rankedin.com${event.EventUrl}`
-            : `https://www.rankedin.com/en/tournament/${event.EventId}`,
-          updated_at: new Date().toISOString()
+          tournament_date:e.StartDate?String(e.StartDate).slice(0,10):null,
+          deadline:findClosingDate(info),
+          center:findCenter(rankedInLocation),
+          city:headerCity,
+          region:"",
+          rankedin_link:e.EventUrl
+            ?`https://www.rankedin.com${e.EventUrl}`
+            :`https://www.rankedin.com/en/tournament/${e.EventId}`,
+          updated_at:new Date().toISOString(),
+          _location:rankedInLocation
         });
-
-      } catch (error) {
-        console.error("Skipping tournament", event.EventId, error.message);
+      }catch(err){
+        console.error("Skip",e.EventId,err.message);
       }
     }
 
-    if (tournaments.length) {
-      const response = await fetch(
+    await enrichGeography(out);
+
+    const payload=out.map(({_location,...t})=>t);
+
+    if(payload.length){
+      const response=await fetch(
         `${SUPABASE_URL}/rest/v1/tournaments?on_conflict=rankedin_id`,
         {
-          method: "POST",
-          headers: {
-            apikey: SERVICE_KEY,
-            Authorization: `Bearer ${SERVICE_KEY}`,
-            "Content-Type": "application/json",
-            Prefer: "resolution=merge-duplicates"
+          method:"POST",
+          headers:{
+            apikey:SERVICE_KEY,
+            Authorization:`Bearer ${SERVICE_KEY}`,
+            "Content-Type":"application/json",
+            "Content-Profile":"public",
+            Prefer:"resolution=merge-duplicates"
           },
-          body: JSON.stringify(tournaments)
+          body:JSON.stringify(payload)
         }
       );
 
-      if (!response.ok) {
-        throw new Error(`Supabase ${response.status}: ${await response.text()}`);
+      if(!response.ok){
+        throw new Error(`Supabase: ${response.status} ${await response.text()}`);
       }
     }
 
-    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Cache-Control","no-store");
 
     return res.status(200).json({
-      success: true,
-      events_found: events.length,
-      dpf_found: dpfEvents.length,
-      saved: tournaments.length
+      success:true,
+      events_found:events.length,
+      dpf_found:dpf.length,
+      saved:payload.length
     });
-
-  } catch (error) {
-    return res.status(500).json({
-      success: false,
-      error: error.message
-    });
+  }catch(error){
+    return res.status(500).json({success:false,error:error.message});
   }
 }
 
-async function fetchCalendarPages(maxPages) {
-  const take = 20;
-  const all = [];
+async function fetchCalendarPages(maxPages){
+  const take=20;
+  const all=[];
 
-  for (let page = 0; page < maxPages; page++) {
-    const from = page * take;
+  for(let page=0;page<maxPages;page++){
+    const from=page*take;
+    const url=`https://api.rankedin.com/v1/calendar/GetEventsAsync?from=${from}&take=${take}&country=45&sport=5&eventType=0&calendarDateFilter=1&calendarOrganization=0`;
+    const response=await fetch(url);
 
-    const url =
-      `https://api.rankedin.com/v1/calendar/GetEventsAsync?from=${from}&take=${take}&country=45&sport=5&eventType=0&calendarDateFilter=1&calendarOrganization=0`;
+    if(!response.ok)throw new Error(`Rankedin calendar ${response.status}`);
 
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(`Rankedin calendar ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    if (!Array.isArray(data) || !data.length) break;
+    const data=await response.json();
+    if(!Array.isArray(data)||!data.length)break;
 
     all.push(...data);
   }
@@ -126,84 +119,79 @@ async function fetchCalendarPages(maxPages) {
   return all;
 }
 
-async function getInfo(id) {
-  const urls = [
+async function getInfo(id){
+  const urls=[
     `https://api.rankedin.com/v1/tournament/GetInfoAsync?id=${id}&language=en`,
     `https://api.rankedin.com/v1/tournament/GetHeaderAsync?id=${id}&language=en`
   ];
 
-  for (const url of urls) {
-    const response = await fetch(url);
-    if (response.ok) return await response.json();
+  for(const url of urls){
+    const response=await fetch(url);
+    if(response.ok)return await response.json();
   }
 
   return null;
 }
 
-async function getClasses(id) {
-  const response = await fetch(
+async function getClasses(id){
+  const response=await fetch(
     `https://api.rankedin.com/v1/tournament/GetClassesSectionAsync?tournamentId=${id}`
   );
 
-  if (!response.ok) {
-    throw new Error(`Classes ${response.status}`);
-  }
+  if(!response.ok)throw new Error(`Classes ${response.status}`);
 
   return response.json();
 }
 
-function findLevels(text = "") {
+function levels(text=""){
   return ["1000","500","200","100","60","35","25","10"]
-    .filter((level) => new RegExp(`DPF\\s*${level}(?!\\d)`, "i").test(text))
-    .map((level) => `DPF${level}`);
+    .filter(x=>new RegExp(`DPF\\s*${x}(?!\\d)`,"i").test(text))
+    .map(x=>`DPF${x}`);
 }
 
-function findCategories(text = "") {
-  const categories = [];
-
-  if (/herre|herrer|mænd|maend/i.test(text)) categories.push("Herre");
-  if (/dame|damer|kvinder/i.test(text)) categories.push("Dame");
-  if (/mix/i.test(text)) categories.push("Mix");
-  if (/junior|u10|u12|u14|u16|u18|ungdom/i.test(text)) categories.push("Junior");
-
-  return categories;
+function categories(text=""){
+  const out=[];
+  if(/herre|herrer|mænd|maend/i.test(text))out.push("Herre");
+  if(/dame|damer|kvinder/i.test(text))out.push("Dame");
+  if(/mix/i.test(text))out.push("Mix");
+  if(/junior|u10|u12|u14|u16|u18|ungdom/i.test(text))out.push("Junior");
+  return out;
 }
 
-function deepValues(object) {
-  const output = [];
+function deepValues(object){
+  const out=[];
 
-  (function walk(value, key = "") {
-    if (value && typeof value === "object") {
-      Object.entries(value).forEach(([childKey, childValue]) => walk(childValue, childKey));
-    } else {
-      output.push([key, value]);
+  (function walk(value,key=""){
+    if(value&&typeof value==="object"){
+      Object.entries(value).forEach(([k,v])=>walk(v,k));
+    }else{
+      out.push([key,value]);
     }
   })(object);
 
-  return output;
+  return out;
 }
 
-function findClosingDate(info) {
-  if (!info) return null;
+function findClosingDate(info){
+  if(!info)return null;
 
-  const values = deepValues(info);
+  const values=deepValues(info);
 
-  const preferred = values.find(([key, value]) =>
-    /closingdate|closedate|registrationend|deadline/i.test(key) && value
+  const preferred=values.find(([key,value])=>
+    /closingdate|closedate|registrationend|deadline/i.test(key)&&value
   );
 
-  const candidates = preferred ? [preferred[1]] : values.map((item) => item[1]);
+  const candidates=preferred?[preferred[1]]:values.map(x=>x[1]);
 
-  for (const value of candidates) {
-    if (typeof value !== "string") continue;
+  for(const value of candidates){
+    if(typeof value!=="string")continue;
 
-    const eu = value.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/);
-
-    if (eu) {
+    const eu=value.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/);
+    if(eu){
       return `${eu[3]}-${eu[2]}-${eu[1]}T${eu[4]}:${eu[5]}:00`;
     }
 
-    if (/^\d{4}-\d{2}-\d{2}T/.test(value)) {
+    if(/^\d{4}-\d{2}-\d{2}T/.test(value)){
       return value;
     }
   }
@@ -211,28 +199,99 @@ function findClosingDate(info) {
   return null;
 }
 
-function findLocation(info) {
-  if (!info) return "";
+function findLocation(info){
+  if(!info)return "";
 
-  const match = deepValues(info).find(([key, value]) =>
-    /location|address/i.test(key) &&
-    typeof value === "string" &&
-    value.length > 4
+  const matches=deepValues(info).filter(([key,value])=>
+    /location|address/i.test(key)&&typeof value==="string"&&value.length>4
   );
 
-  return match ? match[1] : "";
+  if(!matches.length)return "";
+
+  const best=matches.find(([,value])=>/\d{4}/.test(value))||matches[0];
+  return best[1];
 }
 
-function findCity(info, location = "") {
-  const text = JSON.stringify(info || {});
+function findCityFromRankedin(info,location=""){
+  const text=JSON.stringify(info||{});
 
-  const match = text.match(/([A-ZÆØÅa-zæøå][A-ZÆØÅa-zæøå .'-]+),\s*Denmark/i);
-  if (match) return match[1].trim();
+  const denmarkMatch=text.match(/([A-ZÆØÅa-zæøå][A-ZÆØÅa-zæøå .'-]+),\s*Denmark/i);
+  if(denmarkMatch)return denmarkMatch[1].trim();
 
-  const postal = location.match(/\b\d{4}\s+([^,\n]+)/);
-  return postal ? postal[1].trim() : "";
+  const postal=location.match(/\b\d{4}\s+([^,\n]+)/);
+  if(postal)return postal[1].trim();
+
+  const parts=location.split(",").map(x=>x.trim()).filter(Boolean);
+  return parts.length>1?parts[parts.length-1]:"";
 }
 
-function findCenter(location = "") {
+function findCenter(location=""){
+  if(!location)return "";
   return location.split(",")[0].trim();
+}
+
+async function enrichGeography(tournaments){
+  const cache=new Map();
+  let index=0;
+  const concurrency=8;
+
+  async function worker(){
+    while(index<tournaments.length){
+      const current=tournaments[index++];
+      const key=(current._location||current.city||"").trim().toLowerCase();
+
+      if(!key)continue;
+
+      if(cache.has(key)){
+        const geo=cache.get(key);
+        applyGeo(current,geo);
+        continue;
+      }
+
+      const geo=await lookupDanishAddress(current._location||current.city);
+      cache.set(key,geo);
+      applyGeo(current,geo);
+    }
+  }
+
+  await Promise.all(
+    Array.from({length:Math.min(concurrency,tournaments.length)},()=>worker())
+  );
+}
+
+function applyGeo(tournament,geo){
+  if(!geo)return;
+
+  if(geo.city)tournament.city=geo.city;
+  if(geo.region)tournament.region=normalizeRegion(geo.region);
+}
+
+function normalizeRegion(region=""){
+  return String(region)
+    .replace(/^Region\s+/i,"")
+    .trim();
+}
+
+async function lookupDanishAddress(query){
+  try{
+    const url=new URL("https://api.dataforsyningen.dk/adgangsadresser");
+    url.searchParams.set("q",query);
+    url.searchParams.set("fuzzy","");
+
+    const response=await fetch(url);
+
+    if(!response.ok)return null;
+
+    const data=await response.json();
+    if(!Array.isArray(data)||!data.length)return null;
+
+    const address=data[0];
+
+    return {
+      city:address?.postnummer?.navn||"",
+      region:address?.region?.navn||""
+    };
+  }catch{
+    return null;
+  }
 }

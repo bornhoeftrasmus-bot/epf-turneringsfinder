@@ -1,72 +1,17 @@
-# EPF DPF Turneringsfinder – cloud-version
+# EPF DPF Turneringsfinder – Region + tydelig by/center
 
-Denne version bruger:
-- GitHub repository
-- Vercel hosting
-- Supabase database
-- Ren HTML/CSS/JavaScript
-- Ingen Svelte
+Denne version indeholder:
+- EPF/Lunar Liga-inspireret design
+- Regionfilter: Hovedstaden, Sjælland, Syddanmark, Midtjylland, Nordjylland
+- Geografisk opslag via Dataforsyningens officielle adresse-API under sync
+- By og center vises tydeligt hver for sig
+- Classes-baseret kombinationsfilter (fx Dame + DPF60)
+- Supabase publishable key er allerede indsat i app.js
 
-## Farvepalette
-- #2C292A
-- #98B4DF
-- #2A3E91
-- #F0ECE5
-- #D6CCBB
+Vercel Environment Variables skal fortsat være:
+- SUPABASE_URL = https://toeamjaomjgamdmavdck.supabase.co
+- SUPABASE_SERVICE_ROLE_KEY = din secret/service role key
 
-## Sådan kommer du i gang
-
-### 1. app.js
-Erstat:
-- `__SUPABASE_URL__`
-- `__SUPABASE_ANON_KEY__`
-
-med din Supabase Project URL og din publishable/anon key.
-
-Brug aldrig service role key i app.js.
-
-### 2. Vercel Environment Variables
-Opret disse i Vercel:
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
-
-### 3. Supabase
-Den eksisterende tabel `tournaments` forventes at have:
-- rankedin_id
-- name
-- levels
-- categories
-- classes
-- tournament_date
-- deadline
-- center
-- city
-- rankedin_link
-- updated_at
-
-Der skal være en public SELECT/RLS-policy på de turneringsdata, frontenden må læse.
-
-### 4. Deploy
-Upload alle filer fra ZIP'en til roden af dit GitHub repository.
-Forbind repositoryet til Vercel.
-
-### 5. Sync
 Efter deployment:
-`https://DIT-DOMÆNE.vercel.app/api/sync`
-
-### 6. Embed på EPF
-Brug fx:
-
-```html
-<iframe
-  src="https://DIT-DOMÆNE.vercel.app/"
-  width="100%"
-  height="900"
-  style="border:0;border-radius:18px;"
-  loading="lazy">
-</iframe>
-```
-
-## Vigtigt
-Rankedin-endpoints kan ændre sig. `api/sync.js` bygger på de endpoints,
-der allerede er testet i det eksisterende EPF-projekt.
+1. Åbn /api/sync for at genopbygge region/by-data.
+2. Genindlæs forsiden.

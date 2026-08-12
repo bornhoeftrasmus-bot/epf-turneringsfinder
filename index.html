@@ -4,58 +4,63 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DPF Turneringsfinder | Esbjerg Padel Forening</title>
-  <meta name="description" content="Find kommende DPF-turneringer efter niveau, række, dato, by og center.">
+  <meta name="description" content="Find kommende DPF-turneringer efter niveau, række, region, dato, by og center.">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <main class="wrap">
-    <header class="hero">
-      <div class="kicker">ESBJERG PADEL FORENING</div>
+  <main class="app-shell">
+    <section class="hero">
+      <div class="eyebrow">Esbjerg Padel Forening</div>
       <h1>DPF Turneringsfinder</h1>
-      <p>Find kommende DPF-turneringer efter niveau, række, dato, by og center.</p>
-    </header>
+      <p>Find kommende DPF-turneringer samlet ét sted.</p>
+    </section>
 
-    <section class="filters">
-      <div class="topline">
-        <div class="search">
-          <label for="search">Søg</label>
-          <input id="search" type="text" placeholder="Turneringsnavn, by eller center...">
+    <section class="toolbar">
+      <div class="search-wrap">
+        <span class="search-icon">⌕</span>
+        <input id="search" type="search" placeholder="Søg efter turnering, by eller center">
+      </div>
+
+      <div class="filters-grid">
+        <div class="filter-block">
+          <span class="filter-label">Niveau</span>
+          <div id="levels" class="chips"></div>
         </div>
-        <button id="reset" class="reset" type="button">Nulstil filtre</button>
-      </div>
 
-      <div class="filter-group">
-        <span class="label">Niveau</span>
-        <div id="levels" class="chips"></div>
-      </div>
+        <div class="filter-block">
+          <span class="filter-label">Række</span>
+          <div id="categories" class="chips"></div>
+        </div>
 
-      <div class="filter-group">
-        <span class="label">Række</span>
-        <div id="categories" class="chips"></div>
-      </div>
+        <div class="filter-block region-block">
+          <span class="filter-label">Region</span>
+          <div id="regions" class="chips"></div>
+        </div>
 
-      <div class="dates">
-        <label>
-          Dato fra
-          <input id="dateFrom" type="date">
-        </label>
+        <div class="date-filter">
+          <label>
+            <span>Dato fra</span>
+            <input id="dateFrom" type="date">
+          </label>
+          <label>
+            <span>Dato til</span>
+            <input id="dateTo" type="date">
+          </label>
+        </div>
 
-        <label>
-          Dato til
-          <input id="dateTo" type="date">
-        </label>
+        <button id="reset" class="reset-btn" type="button">Nulstil filtre</button>
       </div>
     </section>
 
-    <div class="resultbar">
-      <span id="status">Indlæser turneringer...</span>
-    </div>
+    <section class="summary-row">
+      <strong id="status">Indlæser turneringer…</strong>
+      <span>Data fra Rankedin</span>
+    </section>
 
-    <section id="list" class="list"></section>
+    <section id="list" class="tournament-list"></section>
+    <button id="more" class="more-btn" type="button" hidden>Vis flere</button>
 
-    <button id="more" class="more" type="button" hidden>
-      Vis flere turneringer
-    </button>
+    <footer>DPF Turneringsfinder · Esbjerg Padel Forening</footer>
   </main>
 
   <script src="/app.js"></script>
