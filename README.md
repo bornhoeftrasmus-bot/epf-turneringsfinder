@@ -19,3 +19,11 @@ Efter deployment:
 
 ## Center-rettelse
 Center prioriterer nu Rankedin Location/venue-navnet. Eksempel: `Rocket Padel Viborg - Fabrikvej`. Adresse bruges separat til by og region.
+
+
+## Datafix v3
+- Rankedin Info-side er nu primær kilde til Closing date og Location.
+- Center og adresse behandles som separate felter.
+- By udledes fra dansk postnummer/adresse eller Rankedin-header.
+- Dataforsyningen bruges kun til officiel region.
+- Gamle værdier som `Jylland` bruges ikke længere som region.
