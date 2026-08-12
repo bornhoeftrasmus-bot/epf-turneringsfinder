@@ -1,39 +1,27 @@
-# EPF DPF Turneringsfinder – Region + tydelig by/center
+# EPF DPF Turneringsfinder – batch sync
 
-Denne version indeholder:
-- EPF/Lunar Liga-inspireret design
-- Regionfilter: Hovedstaden, Sjælland, Syddanmark, Midtjylland, Nordjylland
-- Geografisk opslag via Dataforsyningens officielle adresse-API under sync
-- By og center vises tydeligt hver for sig
-- Classes-baseret kombinationsfilter (fx Dame + DPF60)
-- Supabase publishable key er allerede indsat i app.js
+## Hvorfor batch?
+Rankedin hentes i bidder af 20 events, så Vercel-funktionen ikke timer ud.
 
-Vercel Environment Variables skal fortsat være:
-- SUPABASE_URL = https://toeamjaomjgamdmavdck.supabase.co
-- SUPABASE_SERVICE_ROLE_KEY = din secret/service role key
+## Data kommer direkte fra GetInfoAsync
+- ClosingDate = tilmeldingsfrist
+- StartDate = turneringsdato
+- LocationName = center
+- Address = by
+- Latitude/Longtitude = region via Dataforsyningen
+- Classes = niveau/række
 
+## Manuel test
 Efter deployment:
-1. Åbn /api/sync for at genopbygge region/by-data.
-2. Genindlæs forsiden.
+- /api/sync?page=0
+- /api/sync?page=1
+- fortsæt mens `next_page` er et tal
 
+## Automatisk hver morgen
+GitHub Actions-filen `.github/workflows/sync.yml` kører alle batches.
 
-## Center-rettelse
-Center prioriterer nu Rankedin Location/venue-navnet. Eksempel: `Rocket Padel Viborg - Fabrikvej`. Adresse bruges separat til by og region.
+Opret én GitHub Repository Secret:
+- Name: SYNC_BASE_URL
+- Value: https://epf-turneringsfinder.vercel.app
 
-
-## Datafix v3
-- Rankedin Info-side er nu primær kilde til Closing date og Location.
-- Center og adresse behandles som separate felter.
-- By udledes fra dansk postnummer/adresse eller Rankedin-header.
-- Dataforsyningen bruges kun til officiel region.
-- Gamle værdier som `Jylland` bruges ikke længere som region.
-
-
-## RankedIn GetInfoAsync – endelig datakilde
-Denne version bruger felterne direkte fra `TournamentSidebarModel`:
-- `ClosingDate` -> Tilmeldingsfrist
-- `StartDate` -> Turneringsdato
-- `Address` -> By
-- `LocationName` -> Center
-- `Latitude` + `Longtitude` -> officiel region via Dataforsyningen
-- `Classes` -> præcis niveau/række-logik
+Workflowet kører kl. 03:00 UTC, dvs. ca. kl. 05:00 i dansk sommertid.
