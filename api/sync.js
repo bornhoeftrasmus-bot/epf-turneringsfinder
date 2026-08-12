@@ -27,79 +27,57 @@ export default async function handler(req, res) {
 
     for (const event of dpfEvents) {
       try {
-        const [classesData, infoApi, infoPage] = await Promise.all([
-          getClasses(event.EventId),
-          getInfoApi(event.EventId),
-          getInfoPage(event)
-        ]);
+        const info = await getInfo(event.EventId);
+        const model = info?.TournamentSidebarModel;
 
-        const classes = (classesData?.Classes || []).map((classItem) => ({
-          classId: classItem.ClassId,
-          className: classItem.ClassName,
-          level: findLevels(classItem.ClassName),
-          category: findCategories(classItem.ClassName)
+        if (!model) {
+          throw new Error("TournamentSidebarModel missing");
+        }
+
+        const classes = (model.Classes || []).map((classItem) => ({
+          classId: classItem.Id,
+          className: classItem.Name,
+          level: findLevels(classItem.Name),
+          category: findCategories(classItem.Name)
         }));
 
-        const classesText = classes.map((item) => item.className).join(" ");
+        const classesText = classes.map((c) => c.className).join(" ");
 
-        // RankedIn Info-page is the primary source for Location + Closing date.
-        const pageFields = parseInfoPage(infoPage);
-
-        // API is fallback only.
-        const apiLocationName = findLocationNameFromApi(infoApi);
-        const apiAddress = findAddressFromApi(infoApi);
-
-        const center =
-          pageFields.center ||
-          apiLocationName ||
-          "";
-
-        const address =
-          pageFields.address ||
-          apiAddress ||
-          event.Address ||
-          "";
-
-        const headerCity =
-          pageFields.city ||
-          cityFromAddress(address) ||
-          findHeaderCity(infoApi) ||
-          "";
-
-        const deadline =
-          pageFields.deadline ||
-          findClosingDateFromApi(infoApi);
+        const city = cityFromAddress(model.Address || "");
+        const region = await getRegion({
+          address: model.Address || "",
+          lat: model.Latitude,
+          lon: model.Longtitude
+        });
 
         tournaments.push({
-          rankedin_id: String(event.EventId),
-          name: event.EventName || "",
-          levels: findLevels(classesText || event.EventName),
-          categories: findCategories(classesText || event.EventName),
+          rankedin_id: String(model.TournamentId || event.EventId),
+          name: model.TournamentName || event.EventName || "",
+          levels: findLevels(classesText || model.TournamentName || event.EventName),
+          categories: findCategories(classesText || model.TournamentName || event.EventName),
           classes,
-          tournament_date: event.StartDate
-            ? String(event.StartDate).slice(0, 10)
-            : null,
-          deadline,
-          center,
-          city: normalizeCity(headerCity),
-          region: "",
-          rankedin_link: event.EventUrl
-            ? `https://www.rankedin.com${event.EventUrl}`
-            : `https://www.rankedin.com/en/tournament/${event.EventId}`,
-          updated_at: new Date().toISOString(),
-          _address: address,
-          _city: normalizeCity(headerCity)
+
+          // Exact values from RankedIn GetInfoAsync:
+          tournament_date: isoDateOnly(model.StartDate || event.StartDate),
+          deadline: model.ClosingDate || null,
+          center: clean(model.LocationName || model.ClubName || ""),
+          city: clean(city),
+          region: cleanRegion(region),
+
+          rankedin_link: model.Url
+            ? `https://www.rankedin.com${model.Url}`
+            : event.EventUrl
+              ? `https://www.rankedin.com${event.EventUrl}`
+              : `https://www.rankedin.com/en/tournament/${event.EventId}`,
+
+          updated_at: new Date().toISOString()
         });
       } catch (error) {
         console.error("Skipping", event.EventId, error.message);
       }
     }
 
-    await enrichRegions(tournaments);
-
-    const payload = tournaments.map(({ _address, _city, ...row }) => row);
-
-    if (payload.length) {
+    if (tournaments.length) {
       const response = await fetch(
         `${SUPABASE_URL}/rest/v1/tournaments?on_conflict=rankedin_id`,
         {
@@ -111,7 +89,7 @@ export default async function handler(req, res) {
             "Content-Profile": "public",
             Prefer: "resolution=merge-duplicates"
           },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(tournaments)
         }
       );
 
@@ -126,7 +104,7 @@ export default async function handler(req, res) {
       success: true,
       events_found: events.length,
       dpf_found: dpfEvents.length,
-      saved: payload.length
+      saved: tournaments.length
     });
   } catch (error) {
     return res.status(500).json({
@@ -169,240 +147,16 @@ async function fetchCalendarPages(maxPages) {
   return all;
 }
 
-async function getClasses(id) {
+async function getInfo(id) {
   const response = await fetch(
-    `https://api.rankedin.com/v1/tournament/GetClassesSectionAsync?tournamentId=${id}`
+    `https://api.rankedin.com/v1/tournament/GetInfoAsync?id=${id}&language=en`
   );
 
   if (!response.ok) {
-    throw new Error(`Classes ${response.status}`);
+    throw new Error(`GetInfoAsync ${response.status}`);
   }
 
   return response.json();
-}
-
-async function getInfoApi(id) {
-  const urls = [
-    `https://api.rankedin.com/v1/tournament/GetInfoAsync?id=${id}&language=en`,
-    `https://api.rankedin.com/v1/tournament/GetHeaderAsync?id=${id}&language=en`
-  ];
-
-  for (const url of urls) {
-    try {
-      const response = await fetch(url);
-      if (response.ok) return await response.json();
-    } catch {}
-  }
-
-  return null;
-}
-
-async function getInfoPage(event) {
-  if (!event?.EventId) return "";
-
-  let slugPath = event.EventUrl || `/tournament/${event.EventId}`;
-
-  if (!slugPath.startsWith("/")) {
-    slugPath = `/${slugPath}`;
-  }
-
-  const urls = [
-    `https://www.rankedin.com/en${slugPath}/info`,
-    `https://www.rankedin.com${slugPath}/info`
-  ];
-
-  for (const url of urls) {
-    try {
-      const response = await fetch(url, {
-        headers: {
-          "User-Agent": "Mozilla/5.0",
-          "Accept-Language": "en"
-        },
-        redirect: "follow"
-      });
-
-      if (response.ok) {
-        const html = await response.text();
-        if (html && html.length > 500) return html;
-      }
-    } catch {}
-  }
-
-  return "";
-}
-
-function parseInfoPage(html) {
-  if (!html) {
-    return {
-      deadline: null,
-      center: "",
-      address: "",
-      city: ""
-    };
-  }
-
-  const text = htmlToText(html);
-
-  const closingSection = extractBetweenLabels(
-    text,
-    ["Closing date", "Closing Date"],
-    ["Start date", "Start Date"]
-  );
-
-  const locationSection = extractBetweenLabels(
-    text,
-    ["Location"],
-    ["Classes", "Entry fee", "Entry Fee"]
-  );
-
-  const deadline = parseEuropeanDateTime(closingSection);
-
-  const locationLines = locationSection
-    .split("\n")
-    .map((line) => cleanText(line))
-    .filter(Boolean)
-    .filter((line) => !/^location$/i.test(line));
-
-  let center = "";
-  let address = "";
-
-  if (locationLines.length) {
-    // First meaningful line on Rankedin is venue/location name.
-    center = locationLines[0];
-
-    // Everything after venue name belongs to the street/postcode location.
-    address = locationLines.slice(1).join(", ");
-  }
-
-  // Some Rankedin versions render venue + address on one line.
-  if (center && !address) {
-    const oneLine = center;
-
-    const postalMatch = oneLine.match(
-      /^(.*?)(?:,\s*|\s+)([^,]*?\b\d{4}\s+[^,]+(?:,\s*Denmark)?).*$/i
-    );
-
-    if (postalMatch) {
-      center = cleanText(postalMatch[1]);
-      address = cleanText(postalMatch[2]);
-    } else {
-      const commaParts = oneLine.split(",").map(cleanText).filter(Boolean);
-
-      if (commaParts.length >= 3) {
-        center = commaParts[0];
-        address = commaParts.slice(1).join(", ");
-      }
-    }
-  }
-
-  // Protect against accidentally treating an address as a centre.
-  if (center && looksLikeStreetAddress(center)) {
-    center = "";
-  }
-
-  const city =
-    cityFromAddress(address) ||
-    cityFromHeaderText(text);
-
-  return {
-    deadline,
-    center,
-    address,
-    city
-  };
-}
-
-function htmlToText(html) {
-  return decodeEntities(
-    String(html)
-      .replace(/<script[\s\S]*?<\/script>/gi, " ")
-      .replace(/<style[\s\S]*?<\/style>/gi, " ")
-      .replace(/<br\s*\/?>/gi, "\n")
-      .replace(/<\/(div|p|li|tr|td|th|section|article|h1|h2|h3)>/gi, "\n")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/\r/g, "")
-      .replace(/[ \t]+\n/g, "\n")
-      .replace(/\n[ \t]+/g, "\n")
-      .replace(/[ \t]{2,}/g, " ")
-      .replace(/\n{2,}/g, "\n")
-  ).trim();
-}
-
-function decodeEntities(text) {
-  return String(text)
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">");
-}
-
-function extractBetweenLabels(text, startLabels, endLabels) {
-  if (!text) return "";
-
-  const lower = text.toLowerCase();
-
-  let start = -1;
-  let matchedStart = "";
-
-  for (const label of startLabels) {
-    const index = lower.indexOf(label.toLowerCase());
-
-    if (index !== -1 && (start === -1 || index < start)) {
-      start = index;
-      matchedStart = label;
-    }
-  }
-
-  if (start === -1) return "";
-
-  const contentStart = start + matchedStart.length;
-
-  let end = text.length;
-
-  for (const label of endLabels) {
-    const index = lower.indexOf(label.toLowerCase(), contentStart);
-
-    if (index !== -1 && index < end) {
-      end = index;
-    }
-  }
-
-  return text.slice(contentStart, end).trim();
-}
-
-function parseEuropeanDateTime(text) {
-  if (!text) return null;
-
-  const match = String(text).match(
-    /(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})/
-  );
-
-  if (!match) return null;
-
-  const day = match[1].padStart(2, "0");
-  const month = match[2].padStart(2, "0");
-  const year = match[3];
-  const hour = match[4].padStart(2, "0");
-  const minute = match[5];
-
-  return `${year}-${month}-${day}T${hour}:${minute}:00`;
-}
-
-function cleanText(value) {
-  return String(value || "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function looksLikeStreetAddress(value) {
-  const text = String(value || "");
-
-  return (
-    /\b\d+[A-Za-z]?\b/.test(text) &&
-    /\b(vej|gade|all[eé]|boulevard|stræde|plads|road|street|street|vej)\b/i.test(text)
-  );
 }
 
 function findLevels(text = "") {
@@ -414,256 +168,151 @@ function findLevels(text = "") {
 }
 
 function findCategories(text = "") {
-  const out = [];
+  const result = [];
 
-  if (/herre|herrer|mænd|maend/i.test(text)) out.push("Herre");
-  if (/dame|damer|kvinder/i.test(text)) out.push("Dame");
-  if (/mix/i.test(text)) out.push("Mix");
+  if (/herre|herrer|mænd|maend/i.test(text)) result.push("Herre");
+  if (/dame|damer|kvinder/i.test(text)) result.push("Dame");
+  if (/mix/i.test(text)) result.push("Mix");
 
   if (/junior|u10|u12|u14|u16|u18|ungdom/i.test(text)) {
-    out.push("Junior");
+    result.push("Junior");
   }
 
-  return out;
+  return result;
 }
 
-function deepValues(object) {
-  const out = [];
-
-  (function walk(value, key = "") {
-    if (value && typeof value === "object") {
-      Object.entries(value).forEach(([childKey, childValue]) => {
-        walk(childValue, childKey);
-      });
-    } else {
-      out.push([key, value]);
-    }
-  })(object);
-
-  return out;
+function isoDateOnly(value) {
+  if (!value) return null;
+  return String(value).slice(0, 10);
 }
 
-function findClosingDateFromApi(info) {
-  if (!info) return null;
+function cityFromAddress(address = "") {
+  const match = String(address).match(/\b\d{4}\s+([^,\n]+)/);
 
-  const values = deepValues(info);
-
-  const preferred = values.find(([key, value]) =>
-    /closingdate|closedate|registrationend|registrationdeadline|deadline/i.test(key) &&
-    typeof value === "string"
-  );
-
-  const candidates = preferred
-    ? [preferred[1]]
-    : values.map((item) => item[1]);
-
-  for (const value of candidates) {
-    if (typeof value !== "string") continue;
-
-    const eu = parseEuropeanDateTime(value);
-    if (eu) return eu;
-
-    if (/^\d{4}-\d{2}-\d{2}T/.test(value)) {
-      return value;
-    }
-  }
-
-  return null;
-}
-
-function findLocationNameFromApi(info) {
-  if (!info) return "";
-
-  const values = deepValues(info);
-
-  const exact = values.find(([key, value]) =>
-    /^(location|locationname|venue|venuename)$/i.test(key) &&
-    typeof value === "string" &&
-    value.trim().length > 2 &&
-    !looksLikeStreetAddress(value)
-  );
-
-  if (exact) return cleanText(exact[1]);
-
-  const fallback = values.find(([key, value]) =>
-    /location/i.test(key) &&
-    !/address/i.test(key) &&
-    typeof value === "string" &&
-    value.trim().length > 2 &&
-    !looksLikeStreetAddress(value)
-  );
-
-  return fallback ? cleanText(fallback[1]) : "";
-}
-
-function findAddressFromApi(info) {
-  if (!info) return "";
-
-  const values = deepValues(info);
-
-  const exact = values.find(([key, value]) =>
-    /address/i.test(key) &&
-    typeof value === "string" &&
-    value.trim().length > 4
-  );
-
-  return exact ? cleanText(exact[1]) : "";
-}
-
-function findHeaderCity(info) {
-  if (!info) return "";
-
-  const values = deepValues(info);
-
-  const explicit = values.find(([key, value]) =>
-    /^(city|cityname)$/i.test(key) &&
-    typeof value === "string" &&
-    value.trim().length > 1
-  );
-
-  if (explicit) return cleanText(explicit[1]);
-
-  return "";
-}
-
-function cityFromHeaderText(text) {
-  // Example: "København, Denmark"
-  const matches = [
-    ...String(text).matchAll(
-      /(?:^|\n)([A-ZÆØÅ][A-Za-zÆØÅæøå .'-]{1,40}),\s*Denmark\b/g
-    )
-  ];
-
-  if (!matches.length) return "";
-
-  return cleanText(matches[0][1]);
-}
-
-function cityFromAddress(address) {
-  if (!address) return "";
-
-  const postal = String(address).match(
-    /\b\d{4}\s+([^,\n]+)/
-  );
-
-  if (postal) {
-    return cleanText(postal[1]);
+  if (match) {
+    return clean(match[1]);
   }
 
   return "";
 }
 
-function normalizeCity(city = "") {
-  const value = cleanText(city);
-
-  if (!value) return "";
-
-  if (/^(denmark|danmark)$/i.test(value)) {
-    return "";
-  }
-
-  return value;
-}
-
-async function enrichRegions(tournaments) {
-  const cache = new Map();
-  let index = 0;
-  const concurrency = 8;
-
-  async function worker() {
-    while (index < tournaments.length) {
-      const tournament = tournaments[index++];
-
-      const query =
-        tournament._address ||
-        tournament._city ||
-        "";
-
-      const cacheKey = cleanText(query).toLowerCase();
-
-      if (!cacheKey) continue;
-
-      let geo;
-
-      if (cache.has(cacheKey)) {
-        geo = cache.get(cacheKey);
-      } else {
-        geo = await lookupDanishGeography(query);
-        cache.set(cacheKey, geo);
-      }
-
-      if (!geo) continue;
-
-      if (geo.city && !tournament.city) {
-        tournament.city = geo.city;
-      }
-
-      if (geo.region) {
-        tournament.region = normalizeRegion(geo.region);
-      }
-    }
-  }
-
-  await Promise.all(
-    Array.from(
-      { length: Math.min(concurrency, Math.max(1, tournaments.length)) },
-      () => worker()
-    )
-  );
-}
-
-async function lookupDanishGeography(query) {
-  if (!query) return null;
-
-  const searchTerms = [
-    query,
-    cityFromAddress(query)
-  ].filter(Boolean);
-
-  for (const term of searchTerms) {
+async function getRegion({ address, lat, lon }) {
+  // 1) Prefer reverse lookup from RankedIn's exact coordinates.
+  if (Number.isFinite(Number(lat)) && Number.isFinite(Number(lon))) {
     try {
-      const url = new URL(
-        "https://api.dataforsyningen.dk/adgangsadresser"
+      const reverse = new URL(
+        "https://api.dataforsyningen.dk/adgangsadresser/reverse"
       );
 
-      url.searchParams.set("q", term);
-      url.searchParams.set("per_side", "1");
+      reverse.searchParams.set("x", String(lon));
+      reverse.searchParams.set("y", String(lat));
 
-      const response = await fetch(url);
+      const response = await fetch(reverse);
 
-      if (!response.ok) continue;
+      if (response.ok) {
+        const data = await response.json();
+        const region = extractRegion(data);
 
-      const data = await response.json();
-
-      if (!Array.isArray(data) || !data.length) continue;
-
-      const address = data[0];
-
-      return {
-        city:
-          address?.postnummer?.navn ||
-          "",
-        region:
-          address?.region?.navn ||
-          ""
-      };
+        if (region) return region;
+      }
     } catch {}
   }
 
-  return null;
+  // 2) Fallback to RankedIn's full Danish address.
+  if (address) {
+    try {
+      const search = new URL(
+        "https://api.dataforsyningen.dk/adgangsadresser"
+      );
+
+      search.searchParams.set("q", address);
+
+      const response = await fetch(search);
+
+      if (response.ok) {
+        const data = await response.json();
+
+        if (Array.isArray(data) && data.length) {
+          const region = extractRegion(data[0]);
+
+          if (region) return region;
+        }
+      }
+    } catch {}
+  }
+
+  return "";
 }
 
-function normalizeRegion(region = "") {
-  const value = cleanText(region)
-    .replace(/^Region\s+/i, "");
+function extractRegion(data) {
+  if (!data || typeof data !== "object") return "";
 
-  const map = {
-    "Hovedstaden": "Hovedstaden",
-    "Sjælland": "Sjælland",
-    "Syddanmark": "Syddanmark",
-    "Midtjylland": "Midtjylland",
-    "Nordjylland": "Nordjylland"
-  };
+  // Covers the common Dataforsyningen/DAWA response shapes.
+  const candidates = [
+    data?.region?.navn,
+    data?.adgangsadresse?.region?.navn,
+    data?.struktur?.region?.navn,
+    data?.properties?.region?.navn,
+    data?.properties?.region,
+    data?.region
+  ];
 
-  return map[value] || "";
+  const direct = candidates.find(
+    (value) => typeof value === "string" && value.trim()
+  );
+
+  if (direct) return direct;
+
+  // Last-resort recursive search for a key named "region".
+  const found = findRegionRecursively(data);
+
+  return found || "";
+}
+
+function findRegionRecursively(value) {
+  if (!value || typeof value !== "object") return "";
+
+  for (const [key, child] of Object.entries(value)) {
+    if (/^region$/i.test(key)) {
+      if (typeof child === "string" && child.trim()) {
+        return child;
+      }
+
+      if (
+        child &&
+        typeof child === "object" &&
+        typeof child.navn === "string"
+      ) {
+        return child.navn;
+      }
+    }
+
+    if (child && typeof child === "object") {
+      const nested = findRegionRecursively(child);
+
+      if (nested) return nested;
+    }
+  }
+
+  return "";
+}
+
+function cleanRegion(region = "") {
+  const value = clean(region).replace(/^Region\s+/i, "");
+
+  const valid = [
+    "Hovedstaden",
+    "Sjælland",
+    "Syddanmark",
+    "Midtjylland",
+    "Nordjylland"
+  ];
+
+  return valid.includes(value) ? value : "";
+}
+
+function clean(value = "") {
+  return String(value)
+    .replace(/\s+/g, " ")
+    .trim();
 }

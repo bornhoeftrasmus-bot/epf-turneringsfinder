@@ -27,3 +27,13 @@ Center prioriterer nu Rankedin Location/venue-navnet. Eksempel: `Rocket Padel Vi
 - By udledes fra dansk postnummer/adresse eller Rankedin-header.
 - Dataforsyningen bruges kun til officiel region.
 - Gamle værdier som `Jylland` bruges ikke længere som region.
+
+
+## RankedIn GetInfoAsync – endelig datakilde
+Denne version bruger felterne direkte fra `TournamentSidebarModel`:
+- `ClosingDate` -> Tilmeldingsfrist
+- `StartDate` -> Turneringsdato
+- `Address` -> By
+- `LocationName` -> Center
+- `Latitude` + `Longtitude` -> officiel region via Dataforsyningen
+- `Classes` -> præcis niveau/række-logik

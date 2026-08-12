@@ -81,8 +81,12 @@ function fmtDate(v){
   return d?new Intl.DateTimeFormat("da-DK",{day:"2-digit",month:"2-digit",year:"numeric"}).format(d):"Ikke oplyst";
 }
 function fmtDeadline(v){
+  if(!v)return "Ikke oplyst";
+  const m=String(v).match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if(m)return `${m[3]}.${m[2]}.${m[1]} kl. ${m[4]}:${m[5]}`;
   const d=parseDate(v);
   return d?new Intl.DateTimeFormat("da-DK",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}).format(d):"Ikke oplyst";
+}).format(d):"Ikke oplyst";
 }
 function deadlineState(v){
   const d=parseDate(v);
