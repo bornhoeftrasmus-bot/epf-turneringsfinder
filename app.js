@@ -1,5 +1,5 @@
 const SUPABASE_URL = "https://toeamjaomjgamdmavdck.supabase.co";
-const SUPABASE_ANON_KEY = "DIN_PUBLISHABLE_KEY_HER";
+const SUPABASE_ANON_KEY = "sb_publishable_dVqF46Nccdn7i6pSBtahag_jCzxIYAR";
 
 const LEVELS = [
   "DPF10",
