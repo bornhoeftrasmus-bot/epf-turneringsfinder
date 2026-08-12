@@ -36,8 +36,9 @@ export default async function handler(req,res){
         }));
 
         const classText=classes.map(c=>c.className).join(" ");
-        const rankedInLocation=findLocation(info)||e.Address||"";
-        const headerCity=findCityFromRankedin(info,rankedInLocation);
+        const rankedInLocation=findLocation(info)||"";
+        const rankedInAddress=findAddress(info)||e.Address||"";
+        const headerCity=findCityFromRankedin(info,rankedInAddress);
 
         out.push({
           rankedin_id:String(e.EventId),
@@ -47,14 +48,14 @@ export default async function handler(req,res){
           classes,
           tournament_date:e.StartDate?String(e.StartDate).slice(0,10):null,
           deadline:findClosingDate(info),
-          center:findCenter(rankedInLocation),
+          center:findCenter(rankedInLocation)||findCenter(rankedInAddress),
           city:headerCity,
           region:"",
           rankedin_link:e.EventUrl
             ?`https://www.rankedin.com${e.EventUrl}`
             :`https://www.rankedin.com/en/tournament/${e.EventId}`,
           updated_at:new Date().toISOString(),
-          _location:rankedInLocation
+          _location:rankedInAddress||rankedInLocation
         });
       }catch(err){
         console.error("Skip",e.EventId,err.message);
@@ -202,14 +203,52 @@ function findClosingDate(info){
 function findLocation(info){
   if(!info)return "";
 
-  const matches=deepValues(info).filter(([key,value])=>
-    /location|address/i.test(key)&&typeof value==="string"&&value.length>4
+  const values=deepValues(info);
+
+  // Rankedin's venue/location name must win over the street address.
+  // Example:
+  // Location: Rocket Padel Viborg - Fabrikvej
+  // Address:  Fabrikvej 16A, 8800 Viborg, Denmark
+  const locationName=values.find(([key,value])=>
+    /^(location|locationname|venue|venuename)$/i.test(key) &&
+    typeof value==="string" &&
+    value.trim().length>2 &&
+    !/^https?:/i.test(value)
   );
 
-  if(!matches.length)return "";
+  if(locationName)return locationName[1].trim();
 
-  const best=matches.find(([,value])=>/\d{4}/.test(value))||matches[0];
-  return best[1];
+  const looseLocation=values.find(([key,value])=>
+    /location/i.test(key) &&
+    !/address/i.test(key) &&
+    typeof value==="string" &&
+    value.trim().length>2 &&
+    !/^https?:/i.test(value)
+  );
+
+  if(looseLocation)return looseLocation[1].trim();
+
+  const address=values.find(([key,value])=>
+    /address/i.test(key) &&
+    typeof value==="string" &&
+    value.trim().length>4
+  );
+
+  return address?address[1].trim():"";
+}
+
+function findAddress(info){
+  if(!info)return "";
+
+  const values=deepValues(info);
+
+  const address=values.find(([key,value])=>
+    /address/i.test(key) &&
+    typeof value==="string" &&
+    value.trim().length>4
+  );
+
+  return address?address[1].trim():"";
 }
 
 function findCityFromRankedin(info,location=""){

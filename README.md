@@ -15,3 +15,7 @@ Vercel Environment Variables skal fortsat være:
 Efter deployment:
 1. Åbn /api/sync for at genopbygge region/by-data.
 2. Genindlæs forsiden.
+
+
+## Center-rettelse
+Center prioriterer nu Rankedin Location/venue-navnet. Eksempel: `Rocket Padel Viborg - Fabrikvej`. Adresse bruges separat til by og region.
