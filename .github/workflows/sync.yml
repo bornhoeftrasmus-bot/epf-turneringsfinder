@@ -1,0 +1,43 @@
+name: Sync DPF tournaments
+
+on:
+  workflow_dispatch:
+
+  schedule:
+    - cron: "0 3 * * *"
+    - cron: "0 7 * * *"
+    - cron: "0 11 * * *"
+    - cron: "0 15 * * *"
+    - cron: "0 19 * * *"
+    - cron: "0 23 * * *"
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Sync all Rankedin pages
+        shell: bash
+        run: |
+          set -e
+
+          for page in $(seq 0 20); do
+
+            echo "Sync page $page"
+
+            response=$(curl --fail --silent --show-error \
+              "${{ secrets.SYNC_BASE_URL }}/api/sync?page=$page")
+
+            echo "$response"
+
+            next=$(echo "$response" | python3 -c \
+              'import json,sys; print(json.load(sys.stdin).get("next_page"))')
+
+            if [ "$next" = "None" ]; then
+              echo "Alle sider er synkroniseret."
+              break
+            fi
+
+            sleep 2
+
+          done
