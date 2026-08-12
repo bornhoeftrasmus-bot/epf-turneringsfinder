@@ -18,8 +18,10 @@ export default async function handler(req,res){
         if(!m)continue;
         const classes=(m.Classes||[]).map(c=>({classId:c.Id,className:c.Name,level:levels(c.Name),category:categories(c.Name)}));
         const txt=classes.map(c=>c.className).join(" ");
-        const city=cityFromAddress(m.Address||"");
-        const region=await regionFromCoordinatesOrAddress(m.Latitude,m.Longtitude,m.Address||"");
+        const rankedInCity=cityFromAddress(m.Address||"");
+        const geo=await geographyFromCoordinatesOrAddress(m.Latitude,m.Longtitude,m.Address||"");
+        const city=rankedInCity || geo.city || "";
+        const region=geo.region || "";
         rows.push({
           rankedin_id:String(m.TournamentId||event.EventId),
           name:m.TournamentName||event.EventName||"",
@@ -66,27 +68,84 @@ async function getInfo(id){
 function levels(s=""){return["1000","500","200","100","60","35","25","10"].filter(x=>new RegExp(`DPF\\s*${x}(?!\\d)`,"i").test(s)).map(x=>`DPF${x}`)}
 function categories(s=""){const a=[];if(/herre|herrer|mænd|maend/i.test(s))a.push("Herre");if(/dame|damer|kvinder/i.test(s))a.push("Dame");if(/mix/i.test(s))a.push("Mix");if(/junior|u10|u12|u14|u16|u18|ungdom/i.test(s))a.push("Junior");return a}
 function cityFromAddress(a=""){const m=String(a).match(/\b\d{4}\s+([^,\n]+)/);return m?clean(m[1]):""}
-async function regionFromCoordinatesOrAddress(lat,lon,address){
+async function geographyFromCoordinatesOrAddress(lat,lon,address){
   const tries=[];
+
+  // RankedIn provides exact coordinates. Prefer those.
   if(Number.isFinite(Number(lat))&&Number.isFinite(Number(lon))){
-    const u=new URL("https://api.dataforsyningen.dk/adgangsadresser/reverse");u.searchParams.set("x",String(lon));u.searchParams.set("y",String(lat));tries.push(u);
+    const u=new URL("https://api.dataforsyningen.dk/adgangsadresser/reverse");
+    u.searchParams.set("x",String(lon));
+    u.searchParams.set("y",String(lat));
+    tries.push(u);
   }
-  if(address){const u=new URL("https://api.dataforsyningen.dk/adgangsadresser");u.searchParams.set("q",address);tries.push(u)}
+
+  // Fallback to RankedIn's address.
+  if(address){
+    const u=new URL("https://api.dataforsyningen.dk/adgangsadresser");
+    u.searchParams.set("q",address);
+    u.searchParams.set("per_side","1");
+    tries.push(u);
+  }
+
   for(const u of tries){
     try{
-      const r=await fetch(u);if(!r.ok)continue;const d=await r.json();const item=Array.isArray(d)?d[0]:d;
-      const region=findRegion(item);if(region)return cleanRegion(region);
+      const r=await fetch(u);
+      if(!r.ok)continue;
+      const d=await r.json();
+      const item=Array.isArray(d)?d[0]:d;
+      if(!item)continue;
+
+      const city=findCity(item);
+      const region=cleanRegion(findRegion(item));
+
+      if(city||region){
+        return {city:clean(city),region};
+      }
     }catch{}
   }
-  return "";
+
+  return {city:"",region:""};
 }
+
+function findCity(v){
+  if(!v||typeof v!=="object")return"";
+
+  // DAWA/Dataforsyningen commonly exposes postnummer.navn.
+  const direct=[
+    v?.postnummer?.navn,
+    v?.adgangsadresse?.postnummer?.navn,
+    v?.adresse?.postnummer?.navn,
+    v?.properties?.postnummer?.navn,
+    v?.properties?.postnrnavn,
+    v?.postnrnavn,
+    v?.bynavn
+  ].find(x=>typeof x==="string"&&x.trim());
+
+  if(direct)return direct;
+
+  for(const child of Object.values(v)){
+    if(child&&typeof child==="object"){
+      const x=findCity(child);
+      if(x)return x;
+    }
+  }
+  return"";
+}
+
 function findRegion(v){
   if(!v||typeof v!=="object")return"";
+
   if(v.region){
     if(typeof v.region==="string")return v.region;
     if(typeof v.region.navn==="string")return v.region.navn;
   }
-  for(const child of Object.values(v)){if(child&&typeof child==="object"){const x=findRegion(child);if(x)return x}}
+
+  for(const child of Object.values(v)){
+    if(child&&typeof child==="object"){
+      const x=findRegion(child);
+      if(x)return x;
+    }
+  }
   return"";
 }
 function cleanRegion(r=""){const x=clean(r).replace(/^Region\s+/i,"");return["Hovedstaden","Sjælland","Syddanmark","Midtjylland","Nordjylland"].includes(x)?x:""}
