@@ -157,8 +157,11 @@ async function loadTournaments() {
     }
 
     const today = new Date().toISOString().slice(0,10);
-    const endpoint =
-  `${SUPABASE_URL}/rest/v1/tournaments?select=*&tournament_date=gte.${encodeURIComponent(today)}&order=tournament_date.asc`;
+    const endpoint = new URL(`${SUPABASE_URL}/rest/v1/tournaments`);
+
+endpoint.searchParams.set("select", "*");
+endpoint.searchParams.set("tournament_date", `gte.${today}`);
+endpoint.searchParams.set("order", "tournament_date.asc");
     
     const response = await fetch(endpoint, {
       headers: {
