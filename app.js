@@ -1,4 +1,4 @@
-const SUPABASE_URL = "https://toeamjaomjgamdmavdck.supabase.co/rest/v1/";
+const SUPABASE_URL = "https://toeamjaomjgamdmavdck.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_dVqF46Nccdn7i6pSBtahag_jCzxIYAR";
 
 const LEVELS = ["DPF10","DPF25","DPF35","DPF60","DPF100","DPF200","DPF500","DPF1000"];
