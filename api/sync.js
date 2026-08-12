@@ -1,378 +1,428 @@
-const SUPABASE_URL=process.env.SUPABASE_URL;
-const SERVICE_KEY=process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-export default async function handler(req,res){
-  try{
-    if(!SUPABASE_URL||!SERVICE_KEY)return res.status(500).json({success:false,error:"Missing Supabase environment variables"});
-    const page=Math.max(0,parseInt(req.query?.page||"0",10));
-    const take=20;
-    const events=await calendarPage(page,take);
-    const today=new Date();today.setHours(0,0,0,0);
-    const dpf=events.filter(e=>e.OrganisationName==="Dansk Padel Forbunds rangliste").filter(e=>{const d=new Date(e.StartDate);d.setHours(0,0,0,0);return d>=today});
-    const rows=[];
+export default async function handler(req, res) {
+  try {
+    if (!SUPABASE_URL || !SERVICE_KEY) {
+      return res.status(500).json({
+        success: false,
+        error: "Missing Supabase environment variables"
+      });
+    }
 
-    for(const event of dpf){
-      try{
-        const info=await getInfo(event.EventId);
-        const m=info?.TournamentSidebarModel;
-        if(!m)continue;
-        const classes=(m.Classes||[]).map(c=>({classId:c.Id,className:c.Name,level:levels(c.Name),category:categories(c.Name)}));
-        const txt=classes.map(c=>c.className).join(" ");
-        const rankedInCity=cityFromAddress(m.Address||"");
-        const geo=await geographyFromCoordinatesOrAddress(
-          m.Latitude,
-          m.Longtitude,
-          m.Address||""
+    const page = Math.max(0, parseInt(req.query?.page || "0", 10));
+    const take = 20;
+
+    const events = await fetchCalendarPage(page, take);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const dpfEvents = events
+      .filter((event) => event.OrganisationName === "Dansk Padel Forbunds rangliste")
+      .filter((event) => {
+        const date = new Date(event.StartDate);
+        date.setHours(0, 0, 0, 0);
+        return date >= today;
+      });
+
+    const rows = [];
+
+    for (const event of dpfEvents) {
+      try {
+        const info = await getInfo(event.EventId);
+        const model = info?.TournamentSidebarModel;
+
+        if (!model) {
+          console.error("TournamentSidebarModel missing", event.EventId);
+          continue;
+        }
+
+        const classes = (model.Classes || []).map((classItem) => ({
+          classId: classItem.Id,
+          className: classItem.Name,
+          level: findLevels(classItem.Name),
+          category: findCategories(classItem.Name)
+        }));
+
+        const classText = classes.map((c) => c.className).join(" ");
+
+        const geo = await getGeography(
+          model.Latitude,
+          model.Longtitude,
+          model.Address || ""
         );
 
-        const fallbackCity=cityFromNames(
-          m.TournamentName||"",
-          m.LocationName||m.ClubName||""
+        const addressCity = cityFromAddress(model.Address || "");
+        const nameCity = cityFromNames(
+          model.TournamentName || "",
+          model.LocationName || model.ClubName || ""
         );
 
-        const city=cleanCity(
-          rankedInCity ||
+        const city = cleanCity(
+          addressCity ||
           geo.city ||
-          fallbackCity ||
+          nameCity ||
           ""
         );
 
-        const region=
+        const region =
           geo.region ||
           regionFromKnownCity(city) ||
           "";
 
-        const center=cleanCenter(
-          m.LocationName||m.ClubName||"",
-          city,
-          m.Address||""
+        const center = cleanCenter(
+          model.LocationName || model.ClubName || ""
         );
 
         rows.push({
-          rankedin_id:String(m.TournamentId||event.EventId),
-          name:m.TournamentName||event.EventName||"",
-          levels:levels(txt||m.TournamentName||""),
-          categories:categories(txt||m.TournamentName||""),
+          rankedin_id: String(model.TournamentId || event.EventId),
+          name: model.TournamentName || event.EventName || "",
+          levels: findLevels(classText || model.TournamentName || ""),
+          categories: findCategories(classText || model.TournamentName || ""),
           classes,
-          tournament_date:String(m.StartDate||event.StartDate||"").slice(0,10)||null,
-          deadline:m.ClosingDate||null,
+          tournament_date: isoDateOnly(model.StartDate || event.StartDate),
+          deadline: model.ClosingDate || null,
           center,
           city,
           region,
-          rankedin_link:m.Url?`https://www.rankedin.com${m.Url}`:`https://www.rankedin.com${event.EventUrl||""}`,
-          updated_at:new Date().toISOString()
+          rankedin_link: model.Url
+            ? `https://www.rankedin.com${model.Url}`
+            : event.EventUrl
+              ? `https://www.rankedin.com${event.EventUrl}`
+              : `https://www.rankedin.com/en/tournament/${event.EventId}`,
+          updated_at: new Date().toISOString()
         });
-      }catch(e){console.error("skip",event.EventId,e.message)}
+      } catch (error) {
+        console.error("Skipping", event.EventId, error.message);
+      }
     }
 
-    if(rows.length){
-      const r=await fetch(`${SUPABASE_URL}/rest/v1/tournaments?on_conflict=rankedin_id`,{
-        method:"POST",
-        headers:{apikey:SERVICE_KEY,Authorization:`Bearer ${SERVICE_KEY}`,"Content-Type":"application/json","Content-Profile":"public",Prefer:"resolution=merge-duplicates"},
-        body:JSON.stringify(rows)
-      });
-      if(!r.ok)throw new Error(`Supabase ${r.status}: ${await r.text()}`);
+    if (rows.length) {
+      const response = await fetch(
+        `${SUPABASE_URL}/rest/v1/tournaments?on_conflict=rankedin_id`,
+        {
+          method: "POST",
+          headers: {
+            apikey: SERVICE_KEY,
+            Authorization: `Bearer ${SERVICE_KEY}`,
+            "Content-Type": "application/json",
+            "Content-Profile": "public",
+            Prefer: "resolution=merge-duplicates"
+          },
+          body: JSON.stringify(rows)
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `Supabase ${response.status}: ${await response.text()}`
+        );
+      }
     }
+
+    res.setHeader("Cache-Control", "no-store");
 
     return res.status(200).json({
-      success:true,page,fetched:events.length,dpf_found:dpf.length,saved:rows.length,
-      next_page:events.length===take?page+1:null
+      success: true,
+      page,
+      fetched: events.length,
+      dpf_found: dpfEvents.length,
+      saved: rows.length,
+      next_page: events.length === take ? page + 1 : null
     });
-  }catch(e){return res.status(500).json({success:false,error:e.message})}
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
 }
 
-async function calendarPage(page,take){
-  const from=page*take;
-  const u=`https://api.rankedin.com/v1/calendar/GetEventsAsync?from=${from}&take=${take}&country=45&sport=5&eventType=0&calendarDateFilter=1&calendarOrganization=0`;
-  const r=await fetch(u);if(!r.ok)throw new Error(`Calendar ${r.status}`);
-  const d=await r.json();return Array.isArray(d)?d:[];
-}
-async function getInfo(id){
-  const r=await fetch(`https://api.rankedin.com/v1/tournament/GetInfoAsync?id=${id}&language=en`);
-  if(!r.ok)throw new Error(`GetInfo ${r.status}`);return r.json();
-}
-function levels(s=""){return["1000","500","200","100","60","35","25","10"].filter(x=>new RegExp(`DPF\\s*${x}(?!\\d)`,"i").test(s)).map(x=>`DPF${x}`)}
-function categories(s=""){const a=[];if(/herre|herrer|mænd|maend/i.test(s))a.push("Herre");if(/dame|damer|kvinder/i.test(s))a.push("Dame");if(/mix/i.test(s))a.push("Mix");if(/junior|u10|u12|u14|u16|u18|ungdom/i.test(s))a.push("Junior");return a}
-function cityFromAddress(a=""){const m=String(a).match(/\b\d{4}\s+([^,\n]+)/);return m?clean(m[1]):""}
+async function fetchCalendarPage(page, take) {
+  const from = page * take;
 
-function cleanCity(city=""){
-  const value=clean(city)
-    .replace(/,\s*(Denmark|Danmark)$/i,"")
-    .trim();
+  const url =
+    `https://api.rankedin.com/v1/calendar/GetEventsAsync` +
+    `?from=${from}` +
+    `&take=${take}` +
+    `&country=45` +
+    `&sport=5` +
+    `&eventType=0` +
+    `&calendarDateFilter=1` +
+    `&calendarOrganization=0`;
 
-  if(!value)return"";
-  if(/^(Denmark|Danmark)$/i.test(value))return"";
-  if(/^\d{4}$/.test(value))return"";
+  const response = await fetch(url);
 
-  return value;
-}
-
-function cleanCenter(center="",city="",address=""){
-  let value=clean(center);
-
-  if(!value)return"";
-
-  // If Rankedin has appended address parts to LocationName, keep only the venue name.
-  // Typical examples:
-  // "Padel East, Centervej, Frederikssund, Danmark"
-  // "PadelPadel Aalborg - AL BANK ARENA, Hellebarden, Svenstrup J, Danmark"
-  const parts=value.split(",").map(x=>clean(x)).filter(Boolean);
-
-  if(parts.length>1){
-    const first=parts[0];
-
-    // Keep venue first segment when later segments resemble street/city/country.
-    const rest=parts.slice(1).join(", ");
-    if(
-      /(vej|gade|allé|alle|boulevard|stræde|plads|centervej|refshalevej|hellebar|danmark|denmark)/i.test(rest) ||
-      (city && rest.toLowerCase().includes(city.toLowerCase()))
-    ){
-      value=first;
-    }
+  if (!response.ok) {
+    throw new Error(`Rankedin calendar ${response.status}`);
   }
 
-  // Some centres include a useful branch after a dash: keep that.
-  // Do not strip "Rocket Padel Viborg - Fabrikvej".
-  return value;
+  const data = await response.json();
+
+  return Array.isArray(data) ? data : [];
 }
 
-function cityFromNames(tournamentName="",locationName=""){
-  const text=`${tournamentName} ${locationName}`;
+async function getInfo(id) {
+  const response = await fetch(
+    `https://api.rankedin.com/v1/tournament/GetInfoAsync?id=${id}&language=en`
+  );
 
-  // Conservative fallback for cases where RankedIn geo/address is missing.
-  // Only return well-known city tokens explicitly present in the name.
-  const cities=[
-    "Esbjerg","Vejle","Odense","Kolding","Viborg","Aalborg","Aarhus","Brøndby",
-    "København","Frederikssund","Holstebro","Herning","Horsens","Roskilde",
-    "Køge","Næstved","Slagelse","Svendborg","Sønderborg","Haderslev","Aabenraa",
-    "Fredericia","Middelfart","Silkeborg","Randers","Skive","Hjørring","Frederikshavn"
+  if (!response.ok) {
+    throw new Error(`GetInfoAsync ${response.status}`);
+  }
+
+  return response.json();
+}
+
+function findLevels(text = "") {
+  return ["1000", "500", "200", "100", "60", "35", "25", "10"]
+    .filter((level) =>
+      new RegExp(`DPF\\s*${level}(?!\\d)`, "i").test(text)
+    )
+    .map((level) => `DPF${level}`);
+}
+
+function findCategories(text = "") {
+  const result = [];
+
+  if (/herre|herrer|mænd|maend/i.test(text)) result.push("Herre");
+  if (/dame|damer|kvinder/i.test(text)) result.push("Dame");
+  if (/mix/i.test(text)) result.push("Mix");
+
+  if (/junior|u10|u12|u14|u16|u18|ungdom|drenge|piger/i.test(text)) {
+    result.push("Junior");
+  }
+
+  return result;
+}
+
+function isoDateOnly(value) {
+  if (!value) return null;
+  return String(value).slice(0, 10);
+}
+
+function cityFromAddress(address = "") {
+  const match = String(address).match(/\b\d{4}\s+([^,\n]+)/);
+
+  return match ? cleanCity(match[1]) : "";
+}
+
+function cleanCity(value = "") {
+  const city = clean(value)
+    .replace(/,?\s*(Danmark|Denmark)$/i, "")
+    .trim();
+
+  if (!city) return "";
+  if (/^(Danmark|Denmark)$/i.test(city)) return "";
+  if (/^\d{4}$/.test(city)) return "";
+
+  return city;
+}
+
+function cleanCenter(value = "") {
+  const center = clean(value);
+
+  if (!center) return "";
+
+  // RankedIn sometimes appends street/city/country to LocationName.
+  // Keep only the actual venue name before the first comma.
+  // Hyphenated branch names remain intact.
+  return center.split(",")[0].trim();
+}
+
+function cityFromNames(tournamentName = "", locationName = "") {
+  const text = `${tournamentName} ${locationName}`;
+
+  const cities = [
+    "Esbjerg",
+    "Vejle",
+    "Odense",
+    "Kolding",
+    "Viborg",
+    "Aalborg",
+    "Aarhus",
+    "Hasselager",
+    "Svenstrup J",
+    "Brøndby",
+    "København",
+    "Frederikssund",
+    "Holstebro",
+    "Herning",
+    "Horsens",
+    "Roskilde",
+    "Køge",
+    "Næstved",
+    "Slagelse",
+    "Svendborg",
+    "Sønderborg",
+    "Haderslev",
+    "Aabenraa",
+    "Fredericia",
+    "Middelfart",
+    "Silkeborg",
+    "Randers",
+    "Skive",
+    "Hjørring",
+    "Frederikshavn"
   ];
 
-  return cities.find(city=>new RegExp(`\\\\b${escapeRegex(city)}\\\\b`,"i").test(text))||"";
+  return (
+    cities.find((city) =>
+      new RegExp(`\\b${escapeRegex(city)}\\b`, "i").test(text)
+    ) || ""
+  );
 }
 
-function regionFromKnownCity(city=""){
-  const c=cleanCity(city).toLowerCase();
+async function getGeography(lat, lon, address) {
+  let city = "";
+  let region = "";
 
-  const mapping={
-    "esbjerg":"Syddanmark",
-    "vejle":"Syddanmark",
-    "odense":"Syddanmark",
-    "kolding":"Syddanmark",
-    "fredericia":"Syddanmark",
-    "middelfart":"Syddanmark",
-    "svendborg":"Syddanmark",
-    "sønderborg":"Syddanmark",
-    "haderslev":"Syddanmark",
-    "aabenraa":"Syddanmark",
-    "viborg":"Midtjylland",
-    "aarhus":"Midtjylland",
-    "silkeborg":"Midtjylland",
-    "randers":"Midtjylland",
-    "skive":"Midtjylland",
-    "holstebro":"Midtjylland",
-    "herning":"Midtjylland",
-    "horsens":"Midtjylland",
-    "aalborg":"Nordjylland",
-    "svenstrup j":"Nordjylland",
-    "hjørring":"Nordjylland",
-    "frederikshavn":"Nordjylland",
-    "brøndby":"Hovedstaden",
-    "københavn":"Hovedstaden",
-    "frederikssund":"Hovedstaden",
-    "roskilde":"Sjælland",
-    "køge":"Sjælland",
-    "næstved":"Sjælland",
-    "slagelse":"Sjælland"
-  };
-
-  return mapping[c]||"";
-}
-
-function escapeRegex(value){
-  return String(value).replace(/[.*+?^${}()|[\\]\\\\]/g,"\\\\$&");
-}
-
-async function geographyFromCoordinatesOrAddress(lat,lon,address){
-  let city="";
-  let region="";
-
-  const hasCoordinates=
+  const hasCoordinates =
     Number.isFinite(Number(lat)) &&
     Number.isFinite(Number(lon));
 
-  // Official DAWA endpoints: postnummer reverse for city,
-  // region reverse for administrative region.
-  if(hasCoordinates){
-    try{
-      const cityUrl=new URL("https://api.dataforsyningen.dk/postnumre/reverse");
-      cityUrl.searchParams.set("x",String(lon));
-      cityUrl.searchParams.set("y",String(lat));
+  if (hasCoordinates) {
+    try {
+      const postUrl = new URL(
+        "https://api.dataforsyningen.dk/postnumre/reverse"
+      );
 
-      const cityResponse=await fetch(cityUrl);
+      postUrl.searchParams.set("x", String(lon));
+      postUrl.searchParams.set("y", String(lat));
 
-      if(cityResponse.ok){
-        const data=await cityResponse.json();
-        city=cleanCity(
+      const response = await fetch(postUrl);
+
+      if (response.ok) {
+        const data = await response.json();
+
+        city = cleanCity(
           data?.navn ||
           data?.postnummer?.navn ||
           ""
         );
       }
-    }catch{}
+    } catch {}
 
-    try{
-      const regionUrl=new URL("https://api.dataforsyningen.dk/regioner/reverse");
-      regionUrl.searchParams.set("x",String(lon));
-      regionUrl.searchParams.set("y",String(lat));
+    try {
+      const regionUrl = new URL(
+        "https://api.dataforsyningen.dk/regioner/reverse"
+      );
 
-      const regionResponse=await fetch(regionUrl);
+      regionUrl.searchParams.set("x", String(lon));
+      regionUrl.searchParams.set("y", String(lat));
 
-      if(regionResponse.ok){
-        const data=await regionResponse.json();
-        region=cleanRegion(
+      const response = await fetch(regionUrl);
+
+      if (response.ok) {
+        const data = await response.json();
+
+        region = cleanRegion(
           data?.navn ||
           data?.region?.navn ||
           ""
         );
       }
-    }catch{}
+    } catch {}
   }
 
-  // Fallback: if city is still missing, search RankedIn's full address.
-  if(!city && address){
-    try{
-      const addressUrl=new URL("https://api.dataforsyningen.dk/adgangsadresser");
-      addressUrl.searchParams.set("q",address);
-      addressUrl.searchParams.set("struktur","mini");
+  if (!city && address) {
+    try {
+      const url = new URL(
+        "https://api.dataforsyningen.dk/adgangsadresser"
+      );
 
-      const response=await fetch(addressUrl);
+      url.searchParams.set("q", address);
+      url.searchParams.set("per_side", "1");
 
-      if(response.ok){
-        const data=await response.json();
-        const item=Array.isArray(data)?data[0]:null;
+      const response = await fetch(url);
 
-        city=cleanCity(
+      if (response.ok) {
+        const data = await response.json();
+        const item = Array.isArray(data) ? data[0] : null;
+
+        city = cleanCity(
           item?.postnummer?.navn ||
           item?.postnrnavn ||
           ""
         );
       }
-    }catch{}
+    } catch {}
   }
 
-  return {city,region};
+  return { city, region };
 }
 
-function cityFromAddress(address=""){
-  const text=clean(address);
+function regionFromKnownCity(city = "") {
+  const key = cleanCity(city).toLowerCase();
 
-  // RankedIn commonly returns:
-  // "Elmegårdsvej 5, 8361 Hasselager, Danmark, Denmark"
-  const postal=text.match(/\\b\\d{4}\\s+([^,\\n]+)/);
+  const map = {
+    "esbjerg": "Syddanmark",
+    "vejle": "Syddanmark",
+    "odense": "Syddanmark",
+    "kolding": "Syddanmark",
+    "fredericia": "Syddanmark",
+    "middelfart": "Syddanmark",
+    "svendborg": "Syddanmark",
+    "sønderborg": "Syddanmark",
+    "haderslev": "Syddanmark",
+    "aabenraa": "Syddanmark",
 
-  if(postal){
-    return cleanCity(postal[1]);
-  }
+    "viborg": "Midtjylland",
+    "aarhus": "Midtjylland",
+    "hasselager": "Midtjylland",
+    "silkeborg": "Midtjylland",
+    "randers": "Midtjylland",
+    "skive": "Midtjylland",
+    "holstebro": "Midtjylland",
+    "herning": "Midtjylland",
+    "horsens": "Midtjylland",
 
-  return "";
-}
+    "aalborg": "Nordjylland",
+    "svenstrup j": "Nordjylland",
+    "hjørring": "Nordjylland",
+    "frederikshavn": "Nordjylland",
 
-function cleanCity(city=""){
-  const value=clean(city)
-    .replace(/,?\\s*(Denmark|Danmark)$/i,"")
-    .trim();
+    "brøndby": "Hovedstaden",
+    "københavn": "Hovedstaden",
+    "frederikssund": "Hovedstaden",
 
-  if(!value)return"";
-  if(/^(Denmark|Danmark)$/i.test(value))return"";
-  if(/^\\d{4}$/.test(value))return"";
-
-  return value;
-}
-
-function cleanCenter(center="",city="",address=""){
-  let value=clean(center);
-
-  if(!value)return"";
-
-  // Keep useful branch names after hyphens, but remove appended address
-  // after commas:
-  // "Padel Professor Club, Elmegårdsvej, Hasselager, Danmark"
-  // -> "Padel Professor Club"
-  // "Rocket Padel Viborg - Fabrikvej"
-  // -> unchanged
-  const parts=value.split(",").map(clean).filter(Boolean);
-
-  if(parts.length>1){
-    value=parts[0];
-  }
-
-  return value;
-}
-
-function cityFromNames(tournamentName="",locationName=""){
-  const text=`${tournamentName} ${locationName}`;
-
-  const cities=[
-    "Esbjerg","Vejle","Odense","Kolding","Viborg","Aalborg","Aarhus",
-    "Brøndby","København","Frederikssund","Holstebro","Herning",
-    "Horsens","Roskilde","Køge","Næstved","Slagelse","Svendborg",
-    "Sønderborg","Haderslev","Aabenraa","Fredericia","Middelfart",
-    "Silkeborg","Randers","Skive","Hjørring","Frederikshavn",
-    "Hasselager","Svenstrup J"
-  ];
-
-  return cities.find(city=>
-    new RegExp(`\\\\b${escapeRegex(city)}\\\\b`,"i").test(text)
-  )||"";
-}
-
-function regionFromKnownCity(city=""){
-  const c=cleanCity(city).toLowerCase();
-
-  const mapping={
-    "esbjerg":"Syddanmark",
-    "vejle":"Syddanmark",
-    "odense":"Syddanmark",
-    "kolding":"Syddanmark",
-    "fredericia":"Syddanmark",
-    "middelfart":"Syddanmark",
-    "svendborg":"Syddanmark",
-    "sønderborg":"Syddanmark",
-    "haderslev":"Syddanmark",
-    "aabenraa":"Syddanmark",
-
-    "viborg":"Midtjylland",
-    "aarhus":"Midtjylland",
-    "hasselager":"Midtjylland",
-    "silkeborg":"Midtjylland",
-    "randers":"Midtjylland",
-    "skive":"Midtjylland",
-    "holstebro":"Midtjylland",
-    "herning":"Midtjylland",
-    "horsens":"Midtjylland",
-
-    "aalborg":"Nordjylland",
-    "svenstrup j":"Nordjylland",
-    "hjørring":"Nordjylland",
-    "frederikshavn":"Nordjylland",
-
-    "brøndby":"Hovedstaden",
-    "københavn":"Hovedstaden",
-    "frederikssund":"Hovedstaden",
-
-    "roskilde":"Sjælland",
-    "køge":"Sjælland",
-    "næstved":"Sjælland",
-    "slagelse":"Sjælland"
+    "roskilde": "Sjælland",
+    "køge": "Sjælland",
+    "næstved": "Sjælland",
+    "slagelse": "Sjælland"
   };
 
-  return mapping[c]||"";
+  return map[key] || "";
 }
 
-function escapeRegex(value){
-  return String(value).replace(/[.*+?^${}()|[\\]\\\\]/g,"\\\\$&");
+function cleanRegion(value = "") {
+  const region = clean(value)
+    .replace(/^Region\s+/i, "")
+    .trim();
+
+  const valid = [
+    "Hovedstaden",
+    "Sjælland",
+    "Syddanmark",
+    "Midtjylland",
+    "Nordjylland"
+  ];
+
+  return valid.includes(region) ? region : "";
 }
 
-function cleanRegion(r=""){const x=clean(r).replace(/^Region\s+/i,"");return["Hovedstaden","Sjælland","Syddanmark","Midtjylland","Nordjylland"].includes(x)?x:""}
-function clean(v=""){return String(v).replace(/\s+/g," ").trim()}
+function escapeRegex(value) {
+  return String(value).replace(
+    /[.*+?^${}()|[\]\\]/g,
+    "\\$&"
+  );
+}
+
+function clean(value = "") {
+  return String(value)
+    .replace(/\s+/g, " ")
+    .trim();
+}

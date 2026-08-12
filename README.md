@@ -27,39 +27,15 @@ Opret én GitHub Repository Secret:
 Workflowet kører kl. 03:00 UTC, dvs. ca. kl. 05:00 i dansk sommertid.
 
 
-## Geo-fix + 6 daglige opdateringer
-Denne version bruger samme Dataforsyningen-opslag til både **by** og **region**.
-Prioritet for by:
-1. Postnummer/by direkte fra RankedIn Address.
-2. By fra Dataforsyningen via RankedIns koordinater.
-3. By fra Dataforsyningen via RankedIns adresse.
+## Crash fix
+`api/sync.js` er genbygget rent fra batch-versionen.
+Der er ingen dobbeltdefinerede funktioner.
 
-Center kommer fortsat fra RankedIn `LocationName` (fallback `ClubName`).
+Geo:
+- RankedIn Address -> by
+- Dataforsyningen postnumre/reverse -> by
+- Dataforsyningen regioner/reverse -> region
+- LocationName -> center, med adresse efter komma fjernet
+- kendte bynavne i turnerings-/centernavn bruges kun som sidste fallback
 
-GitHub Actions kører 6 gange pr. døgn:
-03:00, 07:00, 11:00, 15:00, 19:00 og 23:00 UTC.
-I dansk sommertid svarer det til ca. 05:00, 09:00, 13:00, 17:00, 21:00 og 01:00.
-Ved vintertid forskydes de danske klokkeslæt én time.
-
-
-## Endelig datarensning
-- `Danmark`/`Denmark` kan ikke længere accepteres som by.
-- By kommer primært fra RankedIn-adresse / Dataforsyning.
-- Hvis geodata mangler, bruges en konservativ fallback fra turnerings-/centernavn.
-- Region kommer primært fra Dataforsyningen og sekundært fra en begrænset fallback for kendte danske byer.
-- Centernavne renses for tilføjede adresseled efter komma, men nyttige afdelingsnavne med bindestreg bevares.
-- GitHub Actions er fortsat sat til 6 kørsler dagligt.
-
-
-## Direct Geo Final
-Geo-opslag er nu direkte:
-- `/postnumre/reverse` -> by/postdistrikt
-- `/regioner/reverse` -> region
-- RankedIn `Address` -> første fallback til by
-- RankedIn `LocationName` -> center, renset for adresse efter komma
-
-Eksempel fra Tournament 70156:
-- Center: Padel Professor Club
-- By: Hasselager
-- Region: Midtjylland
-- Deadline: 12.08.2026 kl. 21:00
+Workflowet kører fortsat 6 gange dagligt.
