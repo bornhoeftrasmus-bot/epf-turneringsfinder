@@ -19,11 +19,35 @@ export default async function handler(req,res){
         const classes=(m.Classes||[]).map(c=>({classId:c.Id,className:c.Name,level:levels(c.Name),category:categories(c.Name)}));
         const txt=classes.map(c=>c.className).join(" ");
         const rankedInCity=cityFromAddress(m.Address||"");
-        const geo=await geographyFromCoordinatesOrAddress(m.Latitude,m.Longtitude,m.Address||"");
-        const fallbackCity=cityFromNames(m.TournamentName||"",m.LocationName||m.ClubName||"");
-        const city=cleanCity(rankedInCity || geo.city || fallbackCity || "");
-        const region=geo.region || regionFromKnownCity(city) || "";
-        const center=cleanCenter(m.LocationName||m.ClubName||"",city,m.Address||"");
+        const geo=await geographyFromCoordinatesOrAddress(
+          m.Latitude,
+          m.Longtitude,
+          m.Address||""
+        );
+
+        const fallbackCity=cityFromNames(
+          m.TournamentName||"",
+          m.LocationName||m.ClubName||""
+        );
+
+        const city=cleanCity(
+          rankedInCity ||
+          geo.city ||
+          fallbackCity ||
+          ""
+        );
+
+        const region=
+          geo.region ||
+          regionFromKnownCity(city) ||
+          "";
+
+        const center=cleanCenter(
+          m.LocationName||m.ClubName||"",
+          city,
+          m.Address||""
+        );
+
         rows.push({
           rankedin_id:String(m.TournamentId||event.EventId),
           name:m.TournamentName||event.EventName||"",
@@ -170,84 +194,185 @@ function escapeRegex(value){
 }
 
 async function geographyFromCoordinatesOrAddress(lat,lon,address){
-  const tries=[];
+  let city="";
+  let region="";
 
-  // RankedIn provides exact coordinates. Prefer those.
-  if(Number.isFinite(Number(lat))&&Number.isFinite(Number(lon))){
-    const u=new URL("https://api.dataforsyningen.dk/adgangsadresser/reverse");
-    u.searchParams.set("x",String(lon));
-    u.searchParams.set("y",String(lat));
-    tries.push(u);
-  }
+  const hasCoordinates=
+    Number.isFinite(Number(lat)) &&
+    Number.isFinite(Number(lon));
 
-  // Fallback to RankedIn's address.
-  if(address){
-    const u=new URL("https://api.dataforsyningen.dk/adgangsadresser");
-    u.searchParams.set("q",address);
-    u.searchParams.set("per_side","1");
-    tries.push(u);
-  }
-
-  for(const u of tries){
+  // Official DAWA endpoints: postnummer reverse for city,
+  // region reverse for administrative region.
+  if(hasCoordinates){
     try{
-      const r=await fetch(u);
-      if(!r.ok)continue;
-      const d=await r.json();
-      const item=Array.isArray(d)?d[0]:d;
-      if(!item)continue;
+      const cityUrl=new URL("https://api.dataforsyningen.dk/postnumre/reverse");
+      cityUrl.searchParams.set("x",String(lon));
+      cityUrl.searchParams.set("y",String(lat));
 
-      const city=findCity(item);
-      const region=cleanRegion(findRegion(item));
+      const cityResponse=await fetch(cityUrl);
 
-      if(city||region){
-        return {city:clean(city),region};
+      if(cityResponse.ok){
+        const data=await cityResponse.json();
+        city=cleanCity(
+          data?.navn ||
+          data?.postnummer?.navn ||
+          ""
+        );
+      }
+    }catch{}
+
+    try{
+      const regionUrl=new URL("https://api.dataforsyningen.dk/regioner/reverse");
+      regionUrl.searchParams.set("x",String(lon));
+      regionUrl.searchParams.set("y",String(lat));
+
+      const regionResponse=await fetch(regionUrl);
+
+      if(regionResponse.ok){
+        const data=await regionResponse.json();
+        region=cleanRegion(
+          data?.navn ||
+          data?.region?.navn ||
+          ""
+        );
       }
     }catch{}
   }
 
-  return {city:"",region:""};
-}
+  // Fallback: if city is still missing, search RankedIn's full address.
+  if(!city && address){
+    try{
+      const addressUrl=new URL("https://api.dataforsyningen.dk/adgangsadresser");
+      addressUrl.searchParams.set("q",address);
+      addressUrl.searchParams.set("struktur","mini");
 
-function findCity(v){
-  if(!v||typeof v!=="object")return"";
+      const response=await fetch(addressUrl);
 
-  // DAWA/Dataforsyningen commonly exposes postnummer.navn.
-  const direct=[
-    v?.postnummer?.navn,
-    v?.adgangsadresse?.postnummer?.navn,
-    v?.adresse?.postnummer?.navn,
-    v?.properties?.postnummer?.navn,
-    v?.properties?.postnrnavn,
-    v?.postnrnavn,
-    v?.bynavn
-  ].find(x=>typeof x==="string"&&x.trim());
+      if(response.ok){
+        const data=await response.json();
+        const item=Array.isArray(data)?data[0]:null;
 
-  if(direct)return direct;
-
-  for(const child of Object.values(v)){
-    if(child&&typeof child==="object"){
-      const x=findCity(child);
-      if(x)return x;
-    }
-  }
-  return"";
-}
-
-function findRegion(v){
-  if(!v||typeof v!=="object")return"";
-
-  if(v.region){
-    if(typeof v.region==="string")return v.region;
-    if(typeof v.region.navn==="string")return v.region.navn;
+        city=cleanCity(
+          item?.postnummer?.navn ||
+          item?.postnrnavn ||
+          ""
+        );
+      }
+    }catch{}
   }
 
-  for(const child of Object.values(v)){
-    if(child&&typeof child==="object"){
-      const x=findRegion(child);
-      if(x)return x;
-    }
-  }
-  return"";
+  return {city,region};
 }
+
+function cityFromAddress(address=""){
+  const text=clean(address);
+
+  // RankedIn commonly returns:
+  // "Elmegårdsvej 5, 8361 Hasselager, Danmark, Denmark"
+  const postal=text.match(/\\b\\d{4}\\s+([^,\\n]+)/);
+
+  if(postal){
+    return cleanCity(postal[1]);
+  }
+
+  return "";
+}
+
+function cleanCity(city=""){
+  const value=clean(city)
+    .replace(/,?\\s*(Denmark|Danmark)$/i,"")
+    .trim();
+
+  if(!value)return"";
+  if(/^(Denmark|Danmark)$/i.test(value))return"";
+  if(/^\\d{4}$/.test(value))return"";
+
+  return value;
+}
+
+function cleanCenter(center="",city="",address=""){
+  let value=clean(center);
+
+  if(!value)return"";
+
+  // Keep useful branch names after hyphens, but remove appended address
+  // after commas:
+  // "Padel Professor Club, Elmegårdsvej, Hasselager, Danmark"
+  // -> "Padel Professor Club"
+  // "Rocket Padel Viborg - Fabrikvej"
+  // -> unchanged
+  const parts=value.split(",").map(clean).filter(Boolean);
+
+  if(parts.length>1){
+    value=parts[0];
+  }
+
+  return value;
+}
+
+function cityFromNames(tournamentName="",locationName=""){
+  const text=`${tournamentName} ${locationName}`;
+
+  const cities=[
+    "Esbjerg","Vejle","Odense","Kolding","Viborg","Aalborg","Aarhus",
+    "Brøndby","København","Frederikssund","Holstebro","Herning",
+    "Horsens","Roskilde","Køge","Næstved","Slagelse","Svendborg",
+    "Sønderborg","Haderslev","Aabenraa","Fredericia","Middelfart",
+    "Silkeborg","Randers","Skive","Hjørring","Frederikshavn",
+    "Hasselager","Svenstrup J"
+  ];
+
+  return cities.find(city=>
+    new RegExp(`\\\\b${escapeRegex(city)}\\\\b`,"i").test(text)
+  )||"";
+}
+
+function regionFromKnownCity(city=""){
+  const c=cleanCity(city).toLowerCase();
+
+  const mapping={
+    "esbjerg":"Syddanmark",
+    "vejle":"Syddanmark",
+    "odense":"Syddanmark",
+    "kolding":"Syddanmark",
+    "fredericia":"Syddanmark",
+    "middelfart":"Syddanmark",
+    "svendborg":"Syddanmark",
+    "sønderborg":"Syddanmark",
+    "haderslev":"Syddanmark",
+    "aabenraa":"Syddanmark",
+
+    "viborg":"Midtjylland",
+    "aarhus":"Midtjylland",
+    "hasselager":"Midtjylland",
+    "silkeborg":"Midtjylland",
+    "randers":"Midtjylland",
+    "skive":"Midtjylland",
+    "holstebro":"Midtjylland",
+    "herning":"Midtjylland",
+    "horsens":"Midtjylland",
+
+    "aalborg":"Nordjylland",
+    "svenstrup j":"Nordjylland",
+    "hjørring":"Nordjylland",
+    "frederikshavn":"Nordjylland",
+
+    "brøndby":"Hovedstaden",
+    "københavn":"Hovedstaden",
+    "frederikssund":"Hovedstaden",
+
+    "roskilde":"Sjælland",
+    "køge":"Sjælland",
+    "næstved":"Sjælland",
+    "slagelse":"Sjælland"
+  };
+
+  return mapping[c]||"";
+}
+
+function escapeRegex(value){
+  return String(value).replace(/[.*+?^${}()|[\\]\\\\]/g,"\\\\$&");
+}
+
 function cleanRegion(r=""){const x=clean(r).replace(/^Region\s+/i,"");return["Hovedstaden","Sjælland","Syddanmark","Midtjylland","Nordjylland"].includes(x)?x:""}
 function clean(v=""){return String(v).replace(/\s+/g," ").trim()}

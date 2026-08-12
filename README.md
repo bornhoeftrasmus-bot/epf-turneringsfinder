@@ -49,3 +49,17 @@ Ved vintertid forskydes de danske klokkeslæt én time.
 - Region kommer primært fra Dataforsyningen og sekundært fra en begrænset fallback for kendte danske byer.
 - Centernavne renses for tilføjede adresseled efter komma, men nyttige afdelingsnavne med bindestreg bevares.
 - GitHub Actions er fortsat sat til 6 kørsler dagligt.
+
+
+## Direct Geo Final
+Geo-opslag er nu direkte:
+- `/postnumre/reverse` -> by/postdistrikt
+- `/regioner/reverse` -> region
+- RankedIn `Address` -> første fallback til by
+- RankedIn `LocationName` -> center, renset for adresse efter komma
+
+Eksempel fra Tournament 70156:
+- Center: Padel Professor Club
+- By: Hasselager
+- Region: Midtjylland
+- Deadline: 12.08.2026 kl. 21:00
