@@ -158,8 +158,8 @@ async function loadTournaments() {
 
     const today = new Date().toISOString().slice(0,10);
     const endpoint =
-      `${SUPABASE_URL}/rest/v1/tournaments?select=*&tournament_date=gte.${today}&order=tournament_date.asc`;
-
+  `${SUPABASE_URL}/rest/v1/tournaments?select=*&tournament_date=gte.${encodeURIComponent(today)}&order=tournament_date.asc`;
+    
     const response = await fetch(endpoint, {
       headers: {
         apikey: SUPABASE_ANON_KEY,
