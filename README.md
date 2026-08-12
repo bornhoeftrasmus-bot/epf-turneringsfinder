@@ -40,3 +40,12 @@ GitHub Actions kører 6 gange pr. døgn:
 03:00, 07:00, 11:00, 15:00, 19:00 og 23:00 UTC.
 I dansk sommertid svarer det til ca. 05:00, 09:00, 13:00, 17:00, 21:00 og 01:00.
 Ved vintertid forskydes de danske klokkeslæt én time.
+
+
+## Endelig datarensning
+- `Danmark`/`Denmark` kan ikke længere accepteres som by.
+- By kommer primært fra RankedIn-adresse / Dataforsyning.
+- Hvis geodata mangler, bruges en konservativ fallback fra turnerings-/centernavn.
+- Region kommer primært fra Dataforsyningen og sekundært fra en begrænset fallback for kendte danske byer.
+- Centernavne renses for tilføjede adresseled efter komma, men nyttige afdelingsnavne med bindestreg bevares.
+- GitHub Actions er fortsat sat til 6 kørsler dagligt.
