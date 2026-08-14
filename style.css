@@ -17,10 +17,12 @@
 
 /* Holdsport integrated embed mode */
 html.embed-mode,body.embed-mode{background:transparent!important}
-body.embed-mode .app-shell{width:100%;max-width:none;padding:0 0 34px}
+body.embed-mode .app-shell{width:100%;max-width:none;padding:0 0 18px}
 body.embed-mode .hero,body.embed-mode footer{display:none!important}
 body.embed-mode .toolbar{margin-top:0;border-radius:16px;box-shadow:none;border:1px solid var(--line);background:#fff}
 body.embed-mode .summary-row{padding-left:2px;padding-right:2px}
+body.embed-mode .tournament-list{min-height:1206px;grid-auto-rows:142px}
 body.embed-mode .tournament-card{background:#F7F3EC;box-shadow:none;border:1px solid #DED6CA;border-radius:15px}
-body.embed-mode .pagination{margin-top:18px;margin-bottom:26px;padding-bottom:6px}
-@media(max-width:620px){body.embed-mode .app-shell{width:100%;padding:0 0 34px}}
+body.embed-mode .pagination{margin-top:16px;margin-bottom:8px;padding-bottom:0}
+@media(max-width:900px){body.embed-mode .tournament-list{min-height:1414px;grid-auto-rows:168px}}
+@media(max-width:620px){body.embed-mode .app-shell{width:100%;padding:0 0 18px}body.embed-mode .tournament-list{min-height:1070px;grid-auto-rows:260px}}
