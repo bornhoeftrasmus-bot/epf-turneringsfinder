@@ -22,7 +22,7 @@
 </head>
 <body>
   <main class="shell">
-    <div class="topbar"><div class="brand">Esbjerg Padel Forening</div><a id="backToEPF" class="back" href="#">← Tilbage til EPF</a></div>
+    <div class="topbar"><div class="brand">Esbjerg Padel Forening</div><a class="back" href="https://www.esbjergpadelforening.dk/klub/esbjerg-padel-forening/sider/turneringer">← Tilbage til EPF</a></div>
 
     <section id="introView">
       <div class="hero">
@@ -70,21 +70,6 @@
       </div>
     </section>
   </main>
-  <script>
-    (function(){
-      const back=document.getElementById('backToEPF');
-      back.addEventListener('click',function(e){
-        e.preventDefault();
-        if(document.referrer && document.referrer !== window.location.href){
-          window.location.href=document.referrer;
-        }else if(window.history.length>1){
-          window.history.back();
-        }else{
-          window.location.href='https://www.esbjergpadelforening.dk/';
-        }
-      });
-    })();
-  </script>
   <script src="./app.js"></script>
   <script src="./order.js"></script>
 </body>
