@@ -12,8 +12,22 @@
 .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 18px;align-content:center;height:100%}.info-label{display:block;color:var(--muted);font-size:10px;font-weight:800;text-transform:uppercase;margin-bottom:2px}.info-value{display:block;font-size:13px;font-weight:750;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.region-value{display:inline-flex;padding:4px 8px;border-radius:999px;background:var(--soft);color:var(--navy);font-size:11px;font-weight:800;white-space:nowrap}
 .card-action{display:inline-flex;align-items:center;justify-content:center;min-width:125px;height:38px;padding:0 13px;border-radius:10px;background:var(--navy);color:#fff;text-decoration:none;font-size:12px;font-weight:800;white-space:nowrap}.empty{padding:30px 20px;background:#fff;border:1px solid var(--line);border-radius:17px;text-align:center;color:var(--muted)}footer{margin-top:28px;text-align:center;color:#8A8580;font-size:11px}
 .pagination{display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:7px;margin:18px 0 22px;padding-bottom:8px}.page-btn{min-width:38px;height:38px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--navy);font-size:12px;font-weight:800;padding:0 12px}.page-btn:hover:not(:disabled){border-color:var(--sky);background:var(--soft)}.page-btn.active{background:var(--navy);border-color:var(--navy);color:#fff}.page-btn:disabled{opacity:.38;cursor:default}.page-dots{color:var(--muted);padding:0 2px}
-@media(max-width:900px){.filters-grid{grid-template-columns:1fr}.region-block{grid-column:auto}.reset-btn{justify-self:stretch}.tournament-card{grid-template-columns:minmax(0,1fr) auto;height:168px;min-height:168px;max-height:168px}.info-grid{grid-column:1/-1;height:auto}}
-@media(max-width:620px){.app-shell{width:min(100% - 18px,1180px);padding-top:9px}.hero{padding:22px 20px}.date-filter{display:grid;grid-template-columns:1fr 1fr}.date-filter label{width:auto}.tournament-card{grid-template-columns:1fr;height:260px;min-height:260px;max-height:260px;gap:12px}.tournament-title{min-height:44.6px;max-height:44.6px}.info-grid{grid-column:auto;height:auto}.card-action{width:100%}.pagination{gap:5px;margin-bottom:28px}.page-btn{height:36px;min-width:36px;padding:0 9px}.place-pill{max-width:64%}.place-pill.city{max-width:34%}}
+
+@media(max-width:999px){
+  .app-shell{width:min(100% - 22px,1180px)}
+  .filters-grid{grid-template-columns:1fr 1fr;gap:14px 16px}.region-block{grid-column:1/-1}.date-filter{grid-column:1/-1}.reset-btn{justify-self:start}
+  .tournament-card{grid-template-columns:minmax(0,1fr) auto;height:168px;min-height:168px;max-height:168px;gap:14px 18px;padding:16px 18px}.info-grid{grid-column:1/-1;height:auto;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 14px}.card-action{grid-column:2;grid-row:1;align-self:center}.tournament-title{font-size:17px}
+  .pagination{gap:6px}.page-btn{min-width:36px;height:36px;padding:0 10px}
+}
+
+@media(max-width:700px){
+  .app-shell{width:min(100% - 14px,1180px);padding-top:4px}.toolbar{padding:12px;border-radius:14px}.search-wrap input{height:44px;font-size:14px}.filters-grid{grid-template-columns:1fr;gap:12px;margin-top:12px}.region-block,.date-filter{grid-column:auto}.date-filter{display:grid;grid-template-columns:1fr 1fr}.date-filter label{width:auto}.reset-btn{width:100%;justify-self:stretch}.chips{gap:5px}.chip{padding:7px 9px;font-size:11px}.summary-row{padding:12px 2px 8px;align-items:flex-start;flex-direction:column;gap:2px}.summary-row strong{font-size:13px}
+  .tournament-card{grid-template-columns:1fr;height:260px;min-height:260px;max-height:260px;gap:10px;padding:15px}.tournament-card>div:first-child{height:auto;justify-content:flex-start}.tournament-title{font-size:16px;min-height:39.7px;max-height:39.7px;margin-bottom:9px}.place-grid{gap:6px}.place-pill{max-width:64%;padding:6px 8px}.place-pill.city{max-width:34%}.place-value{font-size:11px}.info-grid{grid-column:auto;grid-template-columns:1fr 1fr;height:auto;gap:8px 12px}.info-label{font-size:9px}.info-value{font-size:12px}.region-value{font-size:10px}.card-action{grid-column:auto;grid-row:auto;width:100%;height:36px}.pagination{gap:5px;margin:14px 0 18px}.page-btn{height:36px;min-width:34px;padding:0 8px;font-size:11px}.page-btn.page-nav{flex:1 1 42%;max-width:150px}.page-dots{font-size:11px}
+}
+
+@media(max-width:430px){
+  .date-filter{grid-template-columns:1fr}.pagination{justify-content:center}.page-btn{min-width:32px;padding:0 7px}.page-btn.page-nav{flex-basis:44%}
+}
 
 /* Holdsport integrated embed mode */
 html.embed-mode,body.embed-mode{background:transparent!important}
@@ -24,5 +38,5 @@ body.embed-mode .summary-row{padding-left:2px;padding-right:2px}
 body.embed-mode .tournament-list{min-height:1206px;grid-auto-rows:142px}
 body.embed-mode .tournament-card{background:#F7F3EC;box-shadow:none;border:1px solid #DED6CA;border-radius:15px}
 body.embed-mode .pagination{margin-top:16px;margin-bottom:8px;padding-bottom:0}
-@media(max-width:900px){body.embed-mode .tournament-list{min-height:1414px;grid-auto-rows:168px}}
-@media(max-width:620px){body.embed-mode .app-shell{width:100%;padding:0 0 18px}body.embed-mode .tournament-list{min-height:1070px;grid-auto-rows:260px}}
+@media(max-width:999px){body.embed-mode .tournament-list{min-height:1058px;grid-auto-rows:168px}}
+@media(max-width:700px){body.embed-mode .app-shell{width:100%;padding:0 0 18px}body.embed-mode .tournament-list{min-height:1070px;grid-auto-rows:260px}}
