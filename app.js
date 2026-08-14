@@ -71,15 +71,10 @@ function goToFinderTop(){
     window.scrollTo({top:0,behavior:"smooth"});
     return;
   }
-
   try{
     const ref=(document.referrer||"").split("#")[0];
-    if(ref){
-      window.top.location.href=`${ref}#epf-turneringsfinder-start`;
-      return;
-    }
+    if(ref){window.top.location.href=`${ref}#epf-turneringsfinder-start`;return;}
   }catch(e){}
-
   window.scrollTo({top:0,behavior:"smooth"});
 }
 
@@ -87,7 +82,6 @@ function renderPagination(total){
   const pages=Math.max(1,Math.ceil(total/PAGE_SIZE));
   if(currentPage>pages)currentPage=pages;
   if(total<=PAGE_SIZE){$("pagination").innerHTML="";return;}
-
   const buttons=[];
   buttons.push(`<button class="page-btn page-nav" data-page="${Math.max(1,currentPage-1)}" ${currentPage===1?"disabled":""}>← Forrige</button>`);
   const start=Math.max(1,currentPage-2),end=Math.min(pages,currentPage+2);
@@ -95,14 +89,12 @@ function renderPagination(total){
   for(let p=start;p<=end;p++)buttons.push(`<button class="page-btn ${p===currentPage?"active":""}" data-page="${p}">${p}</button>`);
   if(end<pages)buttons.push(`<span class="page-dots">…</span><button class="page-btn" data-page="${pages}">${pages}</button>`);
   buttons.push(`<button class="page-btn page-nav" data-page="${Math.min(pages,currentPage+1)}" ${currentPage===pages?"disabled":""}>Næste →</button>`);
-
   $("pagination").innerHTML=buttons.join("");
   $("pagination").querySelectorAll("[data-page]").forEach(b=>b.onclick=()=>{
     if(b.disabled)return;
     currentPage=Number(b.dataset.page);
     if(IS_EMBED)sessionStorage.setItem("epfTournamentPage",String(currentPage));
-    render();
-    goToFinderTop();
+    render();goToFinderTop();
   });
 }
 
@@ -112,7 +104,6 @@ function render(){
   if(currentPage>pages)currentPage=pages;
   const start=(currentPage-1)*PAGE_SIZE;
   const shown=rows.slice(start,start+PAGE_SIZE);
-
   $("status").textContent=`${rows.length} turnering${rows.length===1?"":"er"} vises · side ${currentPage} af ${pages}`;
   $("list").innerHTML=shown.length?shown.map(t=>`<article class="tournament-card"><div><h2 class="tournament-title">${esc(t.name)}</h2><div class="place-grid"><div class="place-pill city"><div><span class="place-label">By</span><span class="place-value">${esc(t.city||"Ikke oplyst")}</span></div></div><div class="place-pill"><div><span class="place-label">Center</span><span class="place-value">${esc(t.center||"Ikke oplyst")}</span></div></div></div></div><div class="info-grid"><div><span class="info-label">Turneringsdato</span><span class="info-value">${fmtDate(t.tournament_date)}</span></div><div><span class="info-label">Tilmeldingsfrist</span><span class="info-value">${fmtDeadline(t.deadline)}</span></div><div><span class="info-label">Region</span><span class="region-value">${esc(t.region||"Ikke oplyst")}</span></div></div>${t.rankedin_link?`<a class="card-action" href="${esc(t.rankedin_link)}" target="_blank">Se på Rankedin →</a>`:""}</article>`).join(""):`<div class="empty">Ingen turneringer matcher dine filtre.</div>`;
   renderPagination(rows.length);
@@ -139,4 +130,12 @@ $("reset").onclick=()=>{
   $("search").value="";$("dateFrom").value="";$("dateTo").value="";
   document.querySelectorAll(".chip").forEach(x=>x.classList.remove("active"));render();
 };
-chips();load();
+
+chips();
+const preselectedLevel=new URLSearchParams(window.location.search).get("level");
+if(preselectedLevel&&LEVELS.includes(preselectedLevel)){
+  selectedLevels=[preselectedLevel];
+  document.querySelector(`[data-l="${preselectedLevel}"]`)?.classList.add("active");
+  currentPage=1;
+}
+load();
