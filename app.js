@@ -3,7 +3,8 @@ const SUPABASE_ANON_KEY="sb_publishable_dVqF46Nccdn7i6pSBtahag_jCzxIYAR";
 const LEVELS=["DPF10","DPF25","DPF35","DPF60","DPF100","DPF200","DPF500","DPF1000"];
 const CATEGORIES=["Dame","Herre","Mix","Junior"];
 const REGIONS=["Hovedstaden","Sjælland","Syddanmark","Midtjylland","Nordjylland"];
-const PAGE_SIZE=window.innerWidth<700?6:10;
+const IS_EMBED=new URLSearchParams(window.location.search).get("embed")==="1";
+const PAGE_SIZE=window.innerWidth<700?5:(IS_EMBED?8:10);
 let tournaments=[],selectedLevels=[],selectedCategories=[],selectedRegions=[],currentPage=1;
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
@@ -62,13 +63,12 @@ function renderPagination(total){
 
   const buttons=[];
   buttons.push(`<button class="page-btn" data-page="${Math.max(1,currentPage-1)}" ${currentPage===1?"disabled":""}>← Forrige</button>`);
-
   const start=Math.max(1,currentPage-2),end=Math.min(pages,currentPage+2);
   if(start>1)buttons.push(`<button class="page-btn" data-page="1">1</button><span class="page-dots">…</span>`);
   for(let p=start;p<=end;p++)buttons.push(`<button class="page-btn ${p===currentPage?"active":""}" data-page="${p}">${p}</button>`);
   if(end<pages)buttons.push(`<span class="page-dots">…</span><button class="page-btn" data-page="${pages}">${pages}</button>`);
-
   buttons.push(`<button class="page-btn" data-page="${Math.min(pages,currentPage+1)}" ${currentPage===pages?"disabled":""}>Næste →</button>`);
+
   $("pagination").innerHTML=buttons.join("");
   $("pagination").querySelectorAll("[data-page]").forEach(b=>b.onclick=()=>{
     if(b.disabled)return;
