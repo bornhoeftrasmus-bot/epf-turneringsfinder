@@ -55,6 +55,46 @@
     <button id="more" class="more-btn" type="button" hidden>Vis flere</button>
     <footer>DPF Turneringsfinder · Esbjerg Padel Forening</footer>
   </main>
+
+  <script>
+    (function () {
+      const params = new URLSearchParams(window.location.search);
+      const embedMode = params.get("embed") === "1";
+
+      if (embedMode) {
+        document.documentElement.classList.add("embed-mode");
+        document.body.classList.add("embed-mode");
+      }
+
+      function sendHeight() {
+        const height = Math.max(
+          document.body.scrollHeight,
+          document.documentElement.scrollHeight
+        );
+
+        window.parent.postMessage(
+          { type: "EPF_TURNERINGSFINDER_HEIGHT", height },
+          "*"
+        );
+      }
+
+      window.addEventListener("load", sendHeight);
+      window.addEventListener("resize", sendHeight);
+
+      const observer = new MutationObserver(() => {
+        window.requestAnimationFrame(sendHeight);
+      });
+
+      observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true,
+        attributes: true
+      });
+
+      setInterval(sendHeight, 1500);
+    })();
+  </script>
+
   <script src="/app.js"></script>
 </body>
 </html>
