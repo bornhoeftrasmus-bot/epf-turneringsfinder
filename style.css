@@ -20,6 +20,6 @@ body.embed-mode .app-shell{width:100%;max-width:none;padding:0}
 body.embed-mode .hero,body.embed-mode footer{display:none!important}
 body.embed-mode .toolbar{margin-top:0;border-radius:16px;box-shadow:none;border:1px solid var(--line);background:#fff}
 body.embed-mode .summary-row{padding-left:2px;padding-right:2px}
-body.embed-mode .tournament-card{box-shadow:none;border-radius:15px}
+body.embed-mode .tournament-card{background:#F7F3EC;box-shadow:none;border:1px solid #DED6CA;border-radius:15px}
 body.embed-mode .more-btn{margin-bottom:4px}
 @media(max-width:620px){body.embed-mode .app-shell{width:100%;padding:0}}
