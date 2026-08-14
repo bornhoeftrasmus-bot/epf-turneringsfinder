@@ -4,10 +4,15 @@ const LEVELS=["DPF10","DPF25","DPF35","DPF60","DPF100","DPF200","DPF500","DPF100
 const CATEGORIES=["Dame","Herre","Mix","Junior"];
 const REGIONS=["Hovedstaden","Sjælland","Syddanmark","Midtjylland","Nordjylland"];
 const IS_EMBED=new URLSearchParams(window.location.search).get("embed")==="1";
-const PAGE_SIZE=window.innerWidth<700?(IS_EMBED?4:5):(IS_EMBED?8:10);
+const PAGE_SIZE=window.innerWidth<700?4:(window.innerWidth<1000?6:(IS_EMBED?8:10));
 let tournaments=[],selectedLevels=[],selectedCategories=[],selectedRegions=[],currentPage=1;
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
+
+if(IS_EMBED){
+  const saved=Number(sessionStorage.getItem("epfTournamentPage")||"1");
+  if(Number.isFinite(saved)&&saved>0)currentPage=saved;
+}
 
 function chips(){
   $("levels").innerHTML=LEVELS.map(x=>`<button class="chip" data-l="${x}">${x}</button>`).join("");
@@ -18,12 +23,17 @@ function chips(){
   document.querySelectorAll("[data-r]").forEach(b=>b.onclick=()=>toggle(b.dataset.r,"r",b));
 }
 
+function resetPage(){
+  currentPage=1;
+  if(IS_EMBED)sessionStorage.setItem("epfTournamentPage","1");
+}
+
 function toggle(v,t,b){
   let a=t==="l"?selectedLevels:t==="c"?selectedCategories:selectedRegions;
   a=a.includes(v)?a.filter(x=>x!==v):[...a,v];
   if(t==="l")selectedLevels=a;else if(t==="c")selectedCategories=a;else selectedRegions=a;
   b.classList.toggle("active");
-  currentPage=1;
+  resetPage();
   render();
 }
 
@@ -56,25 +66,43 @@ function fmtDeadline(v){
   return m?`${m[3]}.${m[2]}.${m[1]} kl. ${m[4]}:${m[5]}`:"Ikke oplyst";
 }
 
+function goToFinderTop(){
+  if(!IS_EMBED){
+    window.scrollTo({top:0,behavior:"smooth"});
+    return;
+  }
+
+  try{
+    const ref=(document.referrer||"").split("#")[0];
+    if(ref){
+      window.top.location.href=`${ref}#epf-turneringsfinder-start`;
+      return;
+    }
+  }catch(e){}
+
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
 function renderPagination(total){
   const pages=Math.max(1,Math.ceil(total/PAGE_SIZE));
   if(currentPage>pages)currentPage=pages;
   if(total<=PAGE_SIZE){$("pagination").innerHTML="";return;}
 
   const buttons=[];
-  buttons.push(`<button class="page-btn" data-page="${Math.max(1,currentPage-1)}" ${currentPage===1?"disabled":""}>← Forrige</button>`);
+  buttons.push(`<button class="page-btn page-nav" data-page="${Math.max(1,currentPage-1)}" ${currentPage===1?"disabled":""}>← Forrige</button>`);
   const start=Math.max(1,currentPage-2),end=Math.min(pages,currentPage+2);
   if(start>1)buttons.push(`<button class="page-btn" data-page="1">1</button><span class="page-dots">…</span>`);
   for(let p=start;p<=end;p++)buttons.push(`<button class="page-btn ${p===currentPage?"active":""}" data-page="${p}">${p}</button>`);
   if(end<pages)buttons.push(`<span class="page-dots">…</span><button class="page-btn" data-page="${pages}">${pages}</button>`);
-  buttons.push(`<button class="page-btn" data-page="${Math.min(pages,currentPage+1)}" ${currentPage===pages?"disabled":""}>Næste →</button>`);
+  buttons.push(`<button class="page-btn page-nav" data-page="${Math.min(pages,currentPage+1)}" ${currentPage===pages?"disabled":""}>Næste →</button>`);
 
   $("pagination").innerHTML=buttons.join("");
   $("pagination").querySelectorAll("[data-page]").forEach(b=>b.onclick=()=>{
     if(b.disabled)return;
     currentPage=Number(b.dataset.page);
+    if(IS_EMBED)sessionStorage.setItem("epfTournamentPage",String(currentPage));
     render();
-    window.scrollTo({top:0,behavior:"smooth"});
+    goToFinderTop();
   });
 }
 
@@ -103,11 +131,11 @@ async function load(){
   }
 }
 
-$("search").oninput=()=>{currentPage=1;render()};
-$("dateFrom").onchange=()=>{currentPage=1;render()};
-$("dateTo").onchange=()=>{currentPage=1;render()};
+$("search").oninput=()=>{resetPage();render()};
+$("dateFrom").onchange=()=>{resetPage();render()};
+$("dateTo").onchange=()=>{resetPage();render()};
 $("reset").onclick=()=>{
-  selectedLevels=[];selectedCategories=[];selectedRegions=[];currentPage=1;
+  selectedLevels=[];selectedCategories=[];selectedRegions=[];resetPage();
   $("search").value="";$("dateFrom").value="";$("dateTo").value="";
   document.querySelectorAll(".chip").forEach(x=>x.classList.remove("active"));render();
 };
