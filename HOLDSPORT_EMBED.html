@@ -5,10 +5,10 @@
     src="https://epf-turneringsfinder.vercel.app/?embed=1"
     title="DPF Turneringsfinder"
     width="100%"
-    height="800"
+    height="4600"
     scrolling="no"
     loading="lazy"
-    style="display:block;width:100%;border:0;margin:0;padding:0;background:transparent;overflow:hidden;">
+    style="display:block;width:100%;height:4600px;border:0;margin:0;padding:0;background:transparent;overflow:hidden;">
   </iframe>
 </div>
 
@@ -22,7 +22,7 @@
       event.data.type === "EPF_TURNERINGSFINDER_HEIGHT" &&
       Number.isFinite(Number(event.data.height))
     ) {
-      frame.style.height = Math.max(500, Number(event.data.height)) + "px";
+      frame.style.height = Math.max(900, Number(event.data.height)) + "px";
     }
   });
 })();
