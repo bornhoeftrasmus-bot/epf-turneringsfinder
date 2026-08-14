@@ -4,7 +4,7 @@ const LEVELS=["DPF10","DPF25","DPF35","DPF60","DPF100","DPF200","DPF500","DPF100
 const CATEGORIES=["Dame","Herre","Mix","Junior"];
 const REGIONS=["Hovedstaden","Sjælland","Syddanmark","Midtjylland","Nordjylland"];
 const IS_EMBED=new URLSearchParams(window.location.search).get("embed")==="1";
-const PAGE_SIZE=window.innerWidth<700?5:(IS_EMBED?8:10);
+const PAGE_SIZE=window.innerWidth<700?(IS_EMBED?4:5):(IS_EMBED?8:10);
 let tournaments=[],selectedLevels=[],selectedCategories=[],selectedRegions=[],currentPage=1;
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
