@@ -13,3 +13,13 @@
 .card-action{display:inline-flex;align-items:center;justify-content:center;min-width:125px;height:38px;padding:0 13px;border-radius:10px;background:var(--navy);color:#fff;text-decoration:none;font-size:12px;font-weight:800;white-space:nowrap}.empty{padding:30px 20px;background:#fff;border:1px solid var(--line);border-radius:17px;text-align:center;color:var(--muted)}.more-btn{display:block;margin:16px auto 0;border:0;border-radius:10px;padding:10px 17px;background:var(--navy);color:#fff;font-size:12px;font-weight:800}footer{margin-top:28px;text-align:center;color:#8A8580;font-size:11px}
 @media(max-width:900px){.filters-grid{grid-template-columns:1fr}.region-block{grid-column:auto}.reset-btn{justify-self:stretch}.tournament-card{grid-template-columns:1fr auto}.info-grid{grid-column:1/-1}}
 @media(max-width:620px){.app-shell{width:min(100% - 18px,1180px);padding-top:9px}.hero{padding:22px 20px}.date-filter{display:grid;grid-template-columns:1fr 1fr}.date-filter label{width:auto}.tournament-card{grid-template-columns:1fr}.info-grid{grid-column:auto}.card-action{width:100%}}
+
+/* Holdsport integrated embed mode */
+html.embed-mode,body.embed-mode{background:transparent!important}
+body.embed-mode .app-shell{width:100%;max-width:none;padding:0}
+body.embed-mode .hero,body.embed-mode footer{display:none!important}
+body.embed-mode .toolbar{margin-top:0;border-radius:16px;box-shadow:none;border:1px solid var(--line);background:#fff}
+body.embed-mode .summary-row{padding-left:2px;padding-right:2px}
+body.embed-mode .tournament-card{box-shadow:none;border-radius:15px}
+body.embed-mode .more-btn{margin-bottom:4px}
+@media(max-width:620px){body.embed-mode .app-shell{width:100%;padding:0}}
