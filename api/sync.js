@@ -1,5 +1,6 @@
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const COPENHAGEN_TZ = "Europe/Copenhagen";
 
 export default async function handler(req, res) {
   try {
@@ -82,7 +83,11 @@ export default async function handler(req, res) {
           categories: findCategories(classText || model.TournamentName || ""),
           classes,
           tournament_date: isoDateOnly(model.StartDate || event.StartDate),
-          deadline: model.ClosingDate || null,
+          // RankedIn returns ClosingDate as a Danish wall-clock without a timezone
+          // (for example 2026-08-18T22:00:00). Convert that wall-clock to an
+          // absolute instant before sending it to Postgres, otherwise Supabase
+          // interprets it as UTC and Padellab displays it two hours too late in summer.
+          deadline: normalizeRankedinDateTime(model.ClosingDate),
           center,
           city,
           region,
@@ -123,12 +128,19 @@ export default async function handler(req, res) {
 
     res.setHeader("Cache-Control", "no-store");
 
+    const missingDeadlineRows = rows.filter((row) => !row.deadline);
+
     return res.status(200).json({
       success: true,
       page,
       fetched: events.length,
       dpf_found: dpfEvents.length,
       saved: rows.length,
+      deadlines_saved: rows.length - missingDeadlineRows.length,
+      missing_deadlines: missingDeadlineRows.map((row) => ({
+        rankedin_id: row.rankedin_id,
+        name: row.name
+      })),
       next_page: events.length === take ? page + 1 : null
     });
   } catch (error) {
@@ -204,6 +216,76 @@ function isoDateOnly(value) {
   return String(value).slice(0, 10);
 }
 
+function normalizeRankedinDateTime(value) {
+  if (!value) return null;
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  // If Rankedin ever starts returning an explicit offset, respect it.
+  if (/(?:Z|[+-]\d{2}:\d{2})$/i.test(raw)) {
+    const date = new Date(raw);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  }
+
+  const match = raw.match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?$/
+  );
+
+  if (!match) return null;
+
+  const [, year, month, day, hour, minute, second = "00"] = match;
+  return copenhagenWallTimeToUtcIso(year, month, day, hour, minute, second);
+}
+
+function copenhagenWallTimeToUtcIso(year, month, day, hour, minute, second = "00") {
+  const targetWallClock = Date.UTC(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    Number(second)
+  );
+
+  let guess = targetWallClock;
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: COPENHAGEN_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23"
+  });
+
+  for (let i = 0; i < 4; i += 1) {
+    const parts = Object.fromEntries(
+      formatter
+        .formatToParts(new Date(guess))
+        .filter((part) => part.type !== "literal")
+        .map((part) => [part.type, part.value])
+    );
+
+    const representedWallClock = Date.UTC(
+      Number(parts.year),
+      Number(parts.month) - 1,
+      Number(parts.day),
+      Number(parts.hour),
+      Number(parts.minute),
+      Number(parts.second)
+    );
+
+    const correction = targetWallClock - representedWallClock;
+    guess += correction;
+    if (Math.abs(correction) < 1000) break;
+  }
+
+  const result = new Date(guess);
+  return Number.isNaN(result.getTime()) ? null : result.toISOString();
+}
+
 function cityFromAddress(address = "") {
   const match = String(address).match(/\b\d{4}\s+([^,\n]+)/);
 
@@ -226,10 +308,6 @@ function cleanCenter(value = "") {
   const center = clean(value);
 
   if (!center) return "";
-
-  // RankedIn sometimes appends street/city/country to LocationName.
-  // Keep only the actual venue name before the first comma.
-  // Hyphenated branch names remain intact.
   return center.split(",")[0].trim();
 }
 
@@ -369,7 +447,6 @@ function regionFromKnownCity(city = "") {
     "sønderborg": "Syddanmark",
     "haderslev": "Syddanmark",
     "aabenraa": "Syddanmark",
-
     "viborg": "Midtjylland",
     "aarhus": "Midtjylland",
     "hasselager": "Midtjylland",
@@ -379,16 +456,13 @@ function regionFromKnownCity(city = "") {
     "holstebro": "Midtjylland",
     "herning": "Midtjylland",
     "horsens": "Midtjylland",
-
     "aalborg": "Nordjylland",
     "svenstrup j": "Nordjylland",
     "hjørring": "Nordjylland",
     "frederikshavn": "Nordjylland",
-
     "brøndby": "Hovedstaden",
     "københavn": "Hovedstaden",
     "frederikssund": "Hovedstaden",
-
     "roskilde": "Sjælland",
     "køge": "Sjælland",
     "næstved": "Sjælland",
