@@ -3,28 +3,37 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DPF Turneringsfinder | Esbjerg Padel Forening</title>
-  <meta name="description" content="Find kommende DPF-turneringer efter niveau, række, region, dato, by og center.">
-  <link rel="stylesheet" href="/style.css">
+  <title>Turneringsfinder | Padellab</title>
+  <meta name="description" content="Find kommende DPF-turneringer i hele Danmark efter niveau, række, region, dato, by og center.">
+  <meta name="theme-color" content="#07111e">
+  <link rel="stylesheet" href="/checkin-theme.css">
 </head>
 <body>
   <main class="app-shell">
-
-    <div class="topbar">
-      <div class="brand">Esbjerg Padel Forening</div>
-      <a class="back" href="https://www.esbjergpadelforening.dk/klub/esbjerg-padel-forening/sider/turneringer">← Tilbage til EPF</a>
-    </div>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Padellab Turneringsfinder">
+        <span class="brand-word">Padel<b>lab</b></span>
+      </a>
+      <nav class="product-nav" aria-label="Padellab værktøjer">
+        <a class="nav-link active" href="/">Turneringsfinder</a>
+        <a class="nav-link" href="/niveau/">Kend dit niveau</a>
+      </nav>
+    </header>
 
     <section class="hero">
-      <div class="eyebrow">EPF TURNERINGSFINDER</div>
+      <div class="eyebrow">PADELLAB · TURNERINGSFINDER</div>
       <h1>Find din næste <span>DPF-turnering.</span></h1>
-      <p>Find kommende DPF-turneringer i hele Danmark og filtrér efter niveau, række, region, dato, by og center.</p>
+      <p>Se kommende turneringer i hele Danmark og filtrér hurtigt efter niveau, række, region, dato, by og center.</p>
+      <div class="hero-meta">
+        <span>Hele Danmark</span>
+        <span>Data fra Rankedin</span>
+      </div>
     </section>
 
     <section class="toolbar">
       <div class="search-wrap">
-        <span class="search-icon">⌕</span>
-        <input id="search" type="search" placeholder="Søg efter turnering, by eller center">
+        <span class="search-icon" aria-hidden="true">⌕</span>
+        <input id="search" type="search" placeholder="Søg efter turnering, by eller center" aria-label="Søg efter turnering, by eller center">
       </div>
 
       <div class="filters-grid">
@@ -54,12 +63,16 @@
 
     <section class="summary-row">
       <strong id="status">Indlæser turneringer…</strong>
-      <span>Data fra Rankedin</span>
+      <a class="level-cta" href="/niveau/">Usikker på dit niveau? <span>Kend dit niveau →</span></a>
     </section>
 
     <section id="list" class="tournament-list"></section>
     <nav id="pagination" class="pagination" aria-label="Turneringssider"></nav>
-    <footer>DPF Turneringsfinder · Esbjerg Padel Forening</footer>
+
+    <footer>
+      <span>Padellab</span>
+      <span>Turneringsfinder · DPF-data via Rankedin</span>
+    </footer>
   </main>
 
   <script>
