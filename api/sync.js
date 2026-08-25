@@ -2,6 +2,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const COPENHAGEN_TZ = "Europe/Copenhagen";
 const DPF_ORGANISATION_ID = 1420;
+const DPF_ORGANISATION_NAME = "Dansk Padel Forbunds rangliste";
 const DPF_ORGANISATION_URL =
   "https://www.rankedin.com/en/organisation/calendar/1420/dansk-padel-forbund";
 const PAGE_SIZE = 20;
@@ -46,11 +47,12 @@ export default async function handler(req, res) {
     const events = await fetchCalendarPage(page, PAGE_SIZE);
     const today = todayInCopenhagen();
 
-    // calendarOrganization=1420 is the canonical DPF calendar. Do not depend on
-    // a mutable OrganisationName string after the API has already scoped the data.
-    const officialEvents = events.filter(
-      (event) => isoDateOnly(event.StartDate) >= today
-    );
+    // Rankedin's CalendarOrganization parameter is an enum (0/1), not an
+    // organisation id. Use organisation-calendar mode and then lock the feed to
+    // DPF's organisation identity from /organisation/calendar/1420.
+    const officialEvents = events
+      .filter((event) => event.OrganisationName === DPF_ORGANISATION_NAME)
+      .filter((event) => isoDateOnly(event.StartDate) >= today);
 
     const rows = [];
     const failed = [];
@@ -116,8 +118,8 @@ export default async function handler(req, res) {
         let city = structuredCity || addressCity || nameCity || "";
         let region = structuredRegion || regionFromKnownCity(city) || "";
 
-        // Geography is only a fallback now. The official DPF/Rankedin structured
-        // venue fields have priority and avoid unnecessary network requests.
+        // Structured Rankedin venue fields are canonical. Geography is only a
+        // fallback for old events where those fields are incomplete.
         if (!city || !region) {
           const geo = await getGeography(
             model.Latitude,
@@ -184,8 +186,9 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       success: true,
-      source: "rankedin-dpf-organisation-calendar",
+      source: "rankedin-dpf-organisation-calendar-1420",
       source_organisation_id: DPF_ORGANISATION_ID,
+      source_organisation_name: DPF_ORGANISATION_NAME,
       source_organisation_url: DPF_ORGANISATION_URL,
       page,
       fetched: events.length,
@@ -230,9 +233,9 @@ async function fetchCalendarPage(page, take = PAGE_SIZE) {
     `&sport=5` +
     `&eventType=0` +
     `&calendarDateFilter=1` +
-    `&calendarOrganization=${DPF_ORGANISATION_ID}`;
+    `&calendarOrganization=1`;
 
-  return fetchJsonWithRetry(url, `Rankedin DPF calendar page ${page}`);
+  return fetchJsonWithRetry(url, `Rankedin organisation calendar page ${page}`);
 }
 
 async function fetchAllOfficialFutureIds(today) {
@@ -242,7 +245,11 @@ async function fetchAllOfficialFutureIds(today) {
     const events = await fetchCalendarPage(page, PAGE_SIZE);
 
     for (const event of events) {
-      if (isoDateOnly(event.StartDate) >= today && event.EventId) {
+      if (
+        event.OrganisationName === DPF_ORGANISATION_NAME &&
+        isoDateOnly(event.StartDate) >= today &&
+        event.EventId
+      ) {
         ids.add(String(event.EventId));
       }
     }
@@ -250,7 +257,7 @@ async function fetchAllOfficialFutureIds(today) {
     if (events.length < PAGE_SIZE) return ids;
   }
 
-  throw new Error(`DPF calendar exceeded ${MAX_PAGES * PAGE_SIZE} events`);
+  throw new Error(`Organisation calendar exceeded ${MAX_PAGES * PAGE_SIZE} events`);
 }
 
 async function getInfo(id) {
@@ -307,7 +314,7 @@ async function cleanupStaleFutureRows(today) {
     return {
       removed: 0,
       skipped: true,
-      reason: "official DPF calendar returned zero future IDs"
+      reason: "official DPF organisation calendar returned zero future IDs"
     };
   }
 
