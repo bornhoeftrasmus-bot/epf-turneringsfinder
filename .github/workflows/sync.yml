@@ -14,30 +14,32 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
-      - name: Sync all Rankedin pages
+      - name: Sync full official DPF organisation calendar
         shell: bash
+        env:
+          BASE_URL: ${{ secrets.SYNC_BASE_URL }}
         run: |
-          set -e
+          set -euo pipefail
 
-          for page in $(seq 0 20); do
+          for page in $(seq 0 99); do
+            echo "Sync DPF organisation 1420 page $page"
 
-            echo "Sync page $page"
-
-            response=$(curl --fail --silent --show-error \
-              "${{ secrets.SYNC_BASE_URL }}/api/sync?page=$page")
+            response=$(curl --fail-with-body --silent --show-error \
+              --retry 3 --retry-delay 2 --max-time 90 \
+              "${BASE_URL}/api/sync?page=${page}&cleanup=1")
 
             echo "$response"
 
-            next=$(echo "$response" | python3 -c \
-              'import json,sys; print(json.load(sys.stdin).get("next_page"))')
+            has_more=$(RESPONSE="$response" python3 -c \
+              'import json,os; print(str(bool(json.loads(os.environ["RESPONSE"]).get("has_more"))).lower())')
 
-            if [ "$next" = "None" ]; then
-              echo "Alle sider er synkroniseret."
+            if [ "$has_more" != "true" ]; then
+              echo "Hele DPF organisation 1420-kalenderen er synkroniseret."
               break
             fi
 
             sleep 2
-
           done
