@@ -1,35 +1,38 @@
 export default async function handler(req, res) {
-  const base = "https://api.rankedin.com/v1/calendar/GetEventsAsync?from=0&take=2&country=45&sport=5&eventType=0&calendarDateFilter=1";
-  const candidates = [
-    ["calendarOrganization=1420", `${base}&calendarOrganization=1420`],
-    ["calendarOrganization=1&organizationId=1420", `${base}&calendarOrganization=1&organizationId=1420`],
-    ["calendarOrganization=1&organisationId=1420", `${base}&calendarOrganization=1&organisationId=1420`],
-    ["calendarOrganization=1&calendarOrganizationId=1420", `${base}&calendarOrganization=1&calendarOrganizationId=1420`],
-    ["calendarOrganization=1&calendarOrganisationId=1420", `${base}&calendarOrganization=1&calendarOrganisationId=1420`],
-    ["calendarOrganization=0&organizationId=1420", `${base}&calendarOrganization=0&organizationId=1420`],
-    ["calendarOrganization=0&organisationId=1420", `${base}&calendarOrganization=0&organisationId=1420`],
-    ["organisation=1420", `${base}&calendarOrganization=0&organisation=1420`],
-    ["organization=1420", `${base}&calendarOrganization=0&organization=1420`]
-  ];
+  const pageUrl = "https://www.rankedin.com/en/organisation/calendar/1420/dansk-padel-forbund";
+  const page = await fetch(pageUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
+  const html = await page.text();
+  const scripts = [...html.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)]
+    .map((match) => match[1])
+    .filter(Boolean);
 
-  const results = [];
-  for (const [name, url] of candidates) {
+  const inspected = [];
+  for (const src of scripts.slice(-20)) {
     try {
-      const response = await fetch(url, { headers: { Accept: "application/json" } });
+      const url = new URL(src, pageUrl).href;
+      const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
       const text = await response.text();
-      let data;
-      try { data = JSON.parse(text); } catch { data = text.slice(0, 500); }
-      results.push({
-        name,
-        status: response.status,
-        count: Array.isArray(data) ? data.length : null,
-        sample: Array.isArray(data) ? data[0] || null : data
-      });
+      const needles = ["GetEventsAsync", "calendarOrganization", "organisation/calendar", "OrganizationId", "OrganisationId"];
+      const hits = [];
+      for (const needle of needles) {
+        let index = text.indexOf(needle);
+        let count = 0;
+        while (index >= 0 && count < 5) {
+          hits.push({ needle, snippet: text.slice(Math.max(0, index - 220), index + 420) });
+          index = text.indexOf(needle, index + needle.length);
+          count += 1;
+        }
+      }
+      if (hits.length) inspected.push({ url, hits });
     } catch (error) {
-      results.push({ name, error: error.message });
+      inspected.push({ src, error: error.message });
     }
   }
 
   res.setHeader("Cache-Control", "no-store");
-  return res.status(200).json({ results });
+  return res.status(200).json({
+    page_status: page.status,
+    scripts,
+    inspected
+  });
 }
